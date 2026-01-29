@@ -33,7 +33,7 @@ global.fetch = jest.fn();
 
 // 4. Require modules AFTER mocks
 const orderRouter = require('./orderRouter');
-const { DB, Role } = require('../database/database.js');
+const { DB } = require('../database/database.js');
 const { authRouter } = require('./authRouter.js');
 
 const app = express();

@@ -24,7 +24,7 @@ jest.mock('./authRouter.js', () => ({
 
 // 3. Require the router AFTER the mocks are defined
 const userRouter = require('./userRouter');
-const { DB, Role } = require('../database/database.js');
+const { DB } = require('../database/database.js');
 const { authRouter, setAuth } = require('./authRouter.js');
 
 const app = express();
