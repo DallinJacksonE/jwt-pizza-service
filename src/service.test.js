@@ -1,17 +1,53 @@
-/* global beforeAll, test, expect */
+/* global beforeAll, test, expect, jest */
 const request = require('supertest');
 const app = require('./service');
 const version = require('./version.json');
+const { DB } = require('./database/database'); // Import the mocked DB to configure return values
 
 const testUser = { name: 'pizza diner', email: 'reg@test.com', password: 'a' };
 
+// 1. Fix path to ./database/database.js
+// 2. Add auth-related methods (addUser, getUser, loginUser)
+jest.mock('./database/database.js', () => ({
+  Role: {
+    Admin: 'admin',
+    Diner: 'diner',
+  },
+  DB: {
+    addUser: jest.fn(),
+    getUser: jest.fn(),
+    loginUser: jest.fn(),
+    isLoggedIn: jest.fn(),
+    getFranchises: jest.fn(),
+    getUserFranchises: jest.fn(),
+    createFranchise: jest.fn(),
+    deleteFranchise: jest.fn(),
+    createStore: jest.fn(),
+    deleteStore: jest.fn(),
+    getFranchise: jest.fn(),
+  },
+}));
+
+// REMOVED: jest.mock('./authRouter.js') 
+// We want the real authRouter logic to run so endpoints like POST /api/auth actually exist.
+
 beforeAll(async () => {
   testUser.email = Math.random().toString(36).substring(2, 12) + '@test.com';
+
+  // Mock successful DB responses for registration
+  DB.addUser.mockResolvedValue({ ...testUser, id: 1, roles: [{ role: 'diner' }] });
+  DB.loginUser.mockResolvedValue('token');
+
   await request(app).post('/api/auth').send(testUser);
 });
 
 test('login', async () => {
+  // Mock successful DB responses for login
+  DB.getUser.mockResolvedValue({ ...testUser, id: 1, roles: [{ role: 'diner' }] });
+  DB.loginUser.mockResolvedValue('token');
+
   const loginRes = await request(app).put('/api/auth').send(testUser);
+
   expect(loginRes.status).toBe(200);
   expect(loginRes.body.token).toMatch(/^[a-zA-Z0-9\-_]*\.[a-zA-Z0-9\-_]*\.[a-zA-Z0-9\-_]*$/);
 
