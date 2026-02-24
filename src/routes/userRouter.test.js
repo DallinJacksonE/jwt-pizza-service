@@ -16,6 +16,7 @@ jest.mock("../database/database.js", () => ({
     loginUser: jest.fn(),
     getUsers: jest.fn(),
     addUser: jest.fn(),
+    deleteUser: jest.fn(),
   },
 }));
 
@@ -89,13 +90,21 @@ describe("userRouter", () => {
     expect(res.status).toBe(403);
   });
 
-  test("DELETE /api/user/:userId returns not implemented", async () => {
+  test("DELETE /api/user/:userId requires authentication", async () => {
+    const res = await request(app).delete("/api/user/1");
+    expect(res.status).toBe(401);
+  });
+
+  test("DELETE /api/user/:userId as admin deletes another user", async () => {
+    const userIdToDelete = dinerUser.id;
+    DB.deleteUser.mockResolvedValue({ affectedRows: 1 });
+
     const res = await request(app)
-      .delete("/api/user/1")
-      .set("Authorization", `Bearer ${dinerToken}`);
+      .delete(`/api/user/${userIdToDelete}`)
+      .set("Authorization", `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.message).toBe("not implemented");
+    expect(res.body.message).toBe("user deleted");
   });
 
   test("list users requires authentication", async () => {

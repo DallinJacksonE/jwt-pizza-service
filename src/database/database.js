@@ -115,8 +115,8 @@ class DB {
 
       let users = await this.query(
         connection,
-        `SELECT id, name, email FROM user WHERE name LIKE ? LIMIT ${limit + 1} OFFSET ${offset}`,
-        [nameFilter],
+        `SELECT id, name, email FROM user WHERE name LIKE ? OR email LIKE ? LIMIT ${limit + 1} OFFSET ${offset}`,
+        [nameFilter, nameFilter],
       );
 
       const more = users.length > limit;
@@ -185,6 +185,36 @@ class DB {
       }));
 
       return { ...user, roles, password: undefined };
+    } finally {
+      connection.end();
+    }
+  }
+
+  async deleteUser(userId) {
+    const connection = await this.getConnection();
+    try {
+      await connection.beginTransaction();
+      try {
+        // Delete associated records first to maintain referential integrity
+        await this.query(connection, `DELETE FROM auth WHERE userId=?`, [
+          userId,
+        ]);
+        await this.query(connection, `DELETE FROM userRole WHERE userId=?`, [
+          userId,
+        ]);
+
+        const result = await this.query(
+          connection,
+          `DELETE FROM user WHERE id=?`,
+          [userId],
+        );
+
+        await connection.commit();
+        return result;
+      } catch (error) {
+        await connection.rollback();
+        throw new StatusCodeError("unable to delete user", 500);
+      }
     } finally {
       connection.end();
     }

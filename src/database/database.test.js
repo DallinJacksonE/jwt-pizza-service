@@ -242,8 +242,8 @@ describe("Database", () => {
     const [resultUsers, more] = await DB.getUsers(1, 5, "Test*");
 
     expect(mockConnection.execute).toHaveBeenCalledWith(
-      "SELECT id, name, email FROM user WHERE name LIKE ? LIMIT 6 OFFSET 5",
-      ["Test%"],
+      "SELECT id, name, email FROM user WHERE name LIKE ? OR email LIKE ? LIMIT 6 OFFSET 5",
+      ["Test%", "Test%"],
     );
     expect(resultUsers).toEqual(users);
     expect(more).toBe(false);
