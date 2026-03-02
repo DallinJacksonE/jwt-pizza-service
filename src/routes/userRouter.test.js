@@ -12,6 +12,7 @@ jest.mock("../database/database.js", () => ({
 	DB: {
 		updateUser: jest.fn(),
 		listUsers: jest.fn().mockResolvedValue([[], false]),
+		deleteUser: jest.fn(),
 	},
 }));
 
@@ -48,12 +49,18 @@ describe("userRouter", () => {
 		name: "User",
 		roles: [{ role: "diner" }],
 	});
+	const adminUser = JSON.stringify({
+		id: 2,
+		name: "Admin",
+		roles: [{ role: "admin" }],
+	});
 
 	beforeEach(() => {
 		jest.clearAllMocks();
 		// Default behaviors
 		authRouter.authenticateToken.mockImplementation((req, res, next) => next());
 		setAuth.mockResolvedValue("new_token");
+		DB.deleteUser.mockResolvedValue(true);
 	});
 
 	test("GET /api/user/me returns current user", async () => {
@@ -86,11 +93,19 @@ describe("userRouter", () => {
 		expect(res.status).toBe(403);
 	});
 
-	test("DELETE /api/user/:userId returns not implemented", async () => {
-		const res = await request(app).delete("/api/user/1").set("x-user", user);
+	test("DELETE /api/user/:userId as admin deletes user", async () => {
+		const res = await request(app).delete("/api/user/1").set("x-user", adminUser);
 
 		expect(res.status).toBe(200);
-		expect(res.body.message).toBe("not implemented");
+		expect(res.body.message).toBe("user deleted");
+		expect(DB.deleteUser).toHaveBeenCalledWith(1);
+	});
+
+	test("DELETE /api/user/:userId as non-admin fails", async () => {
+		const res = await request(app).delete("/api/user/1").set("x-user", user);
+
+		expect(res.status).toBe(403);
+		expect(DB.deleteUser).not.toHaveBeenCalled();
 	});
 
 	test("list users", async () => {
