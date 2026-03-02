@@ -11,6 +11,7 @@ jest.mock("../database/database.js", () => ({
 	},
 	DB: {
 		updateUser: jest.fn(),
+		listUsers: jest.fn().mockResolvedValue([[], false]),
 	},
 }));
 
