@@ -19,7 +19,7 @@ let logoutCount = 0;
 let userRegistrationCount = 0;
 
 // =================================================================================
-// Metric Collection Functions (to be called from your app)
+// Metric Collection Functions
 // =================================================================================
 
 function requestTracker(req, res, next) {
