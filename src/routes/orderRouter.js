@@ -114,7 +114,7 @@ orderRouter.post(
   "/",
   authRouter.authenticateToken,
   asyncHandler(async (req, res) => {
-    const startTime = Date.now();
+    //const startTime = Date.now();
     let purchaseSuccessful = false;
     let price = 0;
     try {
