@@ -148,7 +148,7 @@ orderRouter.post(
         });
       }
     } finally {
-      const latency = Date.now() - startTime;
+      //const latency = Date.now() - startTime;
       metrics.pizzaPurchase(purchaseSuccessful, price);
     }
   }),
