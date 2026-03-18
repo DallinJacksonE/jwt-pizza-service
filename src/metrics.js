@@ -115,51 +115,26 @@ function buildAndSendMetrics() {
           "sum",
           "asInt",
           {},
-          "DELTA",
         ),
       );
     }
     if (loginSuccessCount > 0) {
       metrics.push(
-        createMetric(
-          "auth.logins",
-          loginSuccessCount,
-          "1",
-          "sum",
-          "asInt",
-          {
-            result: "success",
-          },
-          "DELTA",
-        ),
+        createMetric("auth.logins", loginSuccessCount, "1", "sum", "asInt", {
+          result: "success",
+        }),
       );
     }
     if (loginFailureCount > 0) {
       metrics.push(
-        createMetric(
-          "auth.logins",
-          loginFailureCount,
-          "1",
-          "sum",
-          "asInt",
-          {
-            result: "failure",
-          },
-          "DELTA",
-        ),
+        createMetric("auth.logins", loginFailureCount, "1", "sum", "asInt", {
+          result: "failure",
+        }),
       );
     }
     if (logoutCount > 0) {
       metrics.push(
-        createMetric(
-          "auth.logouts",
-          logoutCount,
-          "1",
-          "sum",
-          "asInt",
-          {},
-          "DELTA",
-        ),
+        createMetric("auth.logouts", logoutCount, "1", "sum", "asInt", {}),
       );
     }
 
@@ -173,7 +148,6 @@ function buildAndSendMetrics() {
           "sum",
           "asInt",
           { result: "success" },
-          "DELTA",
         ),
       );
       metrics.push(
@@ -184,7 +158,6 @@ function buildAndSendMetrics() {
           "sum",
           "asInt",
           { result: "failure" },
-          "DELTA",
         ),
       );
       metrics.push(
@@ -195,7 +168,6 @@ function buildAndSendMetrics() {
           "sum",
           "asDouble",
           {},
-          "DELTA",
         ),
       );
 
@@ -223,45 +195,31 @@ function buildAndSendMetrics() {
           {},
         ),
       );
+      activeUsers.clear();
     }
 
-    // Only send metrics if there is something to report.
-    // If we have event metrics, also include system metrics.
-    if (metrics.length > 0) {
-      metrics.push(
-        createMetric(
-          "system.cpu.utilization",
-          getCpuUsagePercentage(),
-          "%",
-          "gauge",
-          "asDouble",
-          {},
-        ),
-      );
-      metrics.push(
-        createMetric(
-          "system.memory.utilization",
-          getMemoryUsagePercentage(),
-          "%",
-          "gauge",
-          "asDouble",
-          {},
-        ),
-      );
-      sendMetricToGrafana(metrics);
-    }
-
-    // --- Reset interval-based counters ---
-    purchaseSuccessCount = 0;
-    purchaseFailureCount = 0;
-    totalPurchaseValue = 0;
-    purchaseLatencySum = 0;
-    purchaseCount = 0;
-    loginSuccessCount = 0;
-    loginFailureCount = 0;
-    logoutCount = 0;
-    userRegistrationCount = 0;
-    activeUsers.clear();
+    // Always include system metrics and send whatever has been collected.
+    metrics.push(
+      createMetric(
+        "system.cpu.utilization",
+        getCpuUsagePercentage(),
+        "%",
+        "gauge",
+        "asDouble",
+        {},
+      ),
+    );
+    metrics.push(
+      createMetric(
+        "system.memory.utilization",
+        getMemoryUsagePercentage(),
+        "%",
+        "gauge",
+        "asDouble",
+        {},
+      ),
+    );
+    sendMetricToGrafana(metrics);
   } catch (error) {
     console.error("Error sending metrics", error);
   }

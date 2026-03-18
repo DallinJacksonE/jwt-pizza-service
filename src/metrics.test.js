@@ -94,7 +94,7 @@ describe("metrics.js", () => {
     expect(latency.gauge.dataPoints[0].asDouble).toBe(186.67);
   });
 
-  test("auth metrics should be collected and reset", () => {
+  test("auth metrics should be collected and cumulative", () => {
     metrics.userRegistered();
     metrics.userLoggedIn(true);
     metrics.userLoggedIn(false);
@@ -103,8 +103,8 @@ describe("metrics.js", () => {
     metrics.buildAndSendMetrics();
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+    let fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    let sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
 
     expect(
       sentMetrics.find((m) => m.name === "user.registrations").sum.dataPoints[0]
@@ -115,14 +115,28 @@ describe("metrics.js", () => {
         .asInt,
     ).toBe(1);
 
-    // Call again and ensure resettable counters are gone
+    // Call again and ensure counters are cumulative
     global.fetch.mockClear();
+    metrics.userRegistered(); // Add one more registration
     metrics.buildAndSendMetrics();
-    // After being reset, there should be no new metrics to send.
-    expect(global.fetch).not.toHaveBeenCalled();
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+
+    // The value should now be 2
+    expect(
+      sentMetrics.find((m) => m.name === "user.registrations").sum.dataPoints[0]
+        .asInt,
+    ).toBe(2);
+    // This one was not incremented, so it should still be 1
+    expect(
+      sentMetrics.find((m) => m.name === "auth.logouts").sum.dataPoints[0]
+        .asInt,
+    ).toBe(1);
   });
 
-  test("userActivity should count unique active users and reset", () => {
+  test("userActivity should count unique active users per interval", () => {
     metrics.userActivity(101);
     metrics.userActivity(102);
     metrics.userActivity(101); // This duplicate should be ignored by the Set
@@ -130,19 +144,24 @@ describe("metrics.js", () => {
     metrics.buildAndSendMetrics();
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+    let fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    let sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
 
-    const activeUserMetric = sentMetrics.find(
+    let activeUserMetric = sentMetrics.find(
       (m) => m.name === "user.active.count",
     );
     expect(activeUserMetric).toBeDefined();
     expect(activeUserMetric.gauge.dataPoints[0].asInt).toBe(2);
 
-    // Call again and ensure the metric is gone because the set was cleared
+    // Call again and ensure the active user metric is gone because the set was cleared
     global.fetch.mockClear();
     metrics.buildAndSendMetrics();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1); // Still called for system metrics
+
+    fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+    activeUserMetric = sentMetrics.find((m) => m.name === "user.active.count");
+    expect(activeUserMetric).toBeUndefined();
   });
 
   test("system metrics should be calculated correctly", () => {
@@ -186,8 +205,20 @@ describe("metrics.js", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  test("should not send metrics if only cumulative counters are zero", () => {
+  test("should always send system metrics even with no other activity", () => {
     metrics.buildAndSendMetrics();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+
+    const cpu = sentMetrics.find((m) => m.name === "system.cpu.utilization");
+    const memory = sentMetrics.find(
+      (m) => m.name === "system.memory.utilization",
+    );
+
+    expect(cpu).toBeDefined();
+    expect(memory).toBeDefined();
+    expect(sentMetrics.length).toBe(2);
   });
 });
