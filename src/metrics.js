@@ -65,7 +65,7 @@ function userRegistered() {
 
 function getCpuUsagePercentage() {
   const cpuUsage = os.loadavg()[0] / os.cpus().length;
-  return cpuUsage.toFixed(2) * 100;
+  return (cpuUsage * 100).toFixed(2);
 }
 
 function getMemoryUsagePercentage() {
@@ -84,7 +84,7 @@ function getMemoryUsagePercentage() {
  * This function runs periodically to gather all collected metrics,
  * format them, and send them to Grafana.
  */
-setInterval(() => {
+function buildAndSendMetrics() {
   try {
     const metrics = [];
 
@@ -103,28 +103,6 @@ setInterval(() => {
         ),
       );
     });
-
-    // 2. System Metrics
-    metrics.push(
-      createMetric(
-        "system.cpu.utilization",
-        getCpuUsagePercentage(),
-        "%",
-        "gauge",
-        "asDouble",
-        {},
-      ),
-    );
-    metrics.push(
-      createMetric(
-        "system.memory.utilization",
-        getMemoryUsagePercentage(),
-        "%",
-        "gauge",
-        "asDouble",
-        {},
-      ),
-    );
 
     // 3. User & Auth Metrics
     if (userRegistrationCount > 0) {
@@ -206,18 +184,44 @@ setInterval(() => {
     }
 
     // 5. Other custom metrics
-    metrics.push(
-      createMetric(
-        "greeting.change.count",
-        greetingChangedCount,
-        "1",
-        "sum",
-        "asInt",
-        {},
-      ),
-    );
+    if (greetingChangedCount > 0) {
+      metrics.push(
+        createMetric(
+          "greeting.change.count",
+          greetingChangedCount,
+          "1",
+          "sum",
+          "asInt",
+          {},
+        ),
+      );
+    }
 
-    sendMetricToGrafana(metrics);
+    // Only send metrics if there is something to report.
+    // If we have event metrics, also include system metrics.
+    if (metrics.length > 0) {
+      metrics.push(
+        createMetric(
+          "system.cpu.utilization",
+          getCpuUsagePercentage(),
+          "%",
+          "gauge",
+          "asDouble",
+          {},
+        ),
+      );
+      metrics.push(
+        createMetric(
+          "system.memory.utilization",
+          getMemoryUsagePercentage(),
+          "%",
+          "gauge",
+          "asDouble",
+          {},
+        ),
+      );
+      sendMetricToGrafana(metrics);
+    }
 
     // --- Reset interval-based counters ---
     purchaseSuccessCount = 0;
@@ -232,7 +236,12 @@ setInterval(() => {
   } catch (error) {
     console.error("Error sending metrics", error);
   }
-}, 10000);
+}
+
+// Do not run the metrics sending interval when in a test environment
+if (process.env.NODE_ENV !== "test") {
+  setInterval(buildAndSendMetrics, 10000);
+}
 
 /**
  * Creates a metric object in the OTLP JSON format that Grafana expects.
@@ -328,4 +337,5 @@ module.exports = {
   userLoggedIn,
   userLoggedOut,
   userRegistered,
+  buildAndSendMetrics, // Exported for testing
 };
