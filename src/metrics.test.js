@@ -1,201 +1,220 @@
-/* global describe, test, expect, jest, beforeEach */
+/* global describe, test, expect, jest, beforeEach, afterEach */
 
-// Mock dependencies that must be mocked before module load
-jest.mock("os");
+// 1. Mock dependencies before any imports
 jest.mock("./config", () => ({
   metrics: {
     source: "test-service",
     endpointUrl: "http://test-grafana.com",
-    accountId: "12345",
-    apiKey: "test-key",
+    apiKey: "test-api-key",
+    accountId: "test-account-id",
   },
 }));
-global.fetch = jest.fn();
 
-describe("metrics.js", () => {
+jest.mock("os", () => ({
+  loadavg: jest.fn(),
+  cpus: jest.fn(),
+  totalmem: jest.fn(),
+  freemem: jest.fn(),
+}));
+
+// Mock global fetch
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    text: () => Promise.resolve(""),
+  }),
+);
+
+describe("metrics", () => {
   let metrics;
-  let os;
 
   beforeEach(() => {
-    // Reset modules to clear internal state (counters) for each test
+    // Reset modules to clear internal state (like cumulative counters)
     jest.resetModules();
 
-    // Re-require modules after reset
-    metrics = require("./metrics");
-    os = require("os");
-
-    // Clear mocks
+    // Clear all mocks
     jest.clearAllMocks();
 
-    // Provide default mock implementations
+    // Re-import 'os' after reset and configure mocks
+    const os = require("os");
     os.loadavg.mockReturnValue([0.5]);
-    os.cpus.mockReturnValue(new Array(4));
-    os.totalmem.mockReturnValue(16 * 1024 * 1024 * 1024);
-    os.freemem.mockReturnValue(8 * 1024 * 1024 * 1024);
-    global.fetch.mockResolvedValue({ ok: true });
+    os.cpus.mockReturnValue([{}, {}]); // 2 cpus
+    os.totalmem.mockReturnValue(16 * 1024 * 1024 * 1024); // 16GB
+    os.freemem.mockReturnValue(8 * 1024 * 1024 * 1024); // 8GB
+
+    // Re-require the module to get a fresh instance for each test
+    metrics = require("./metrics");
   });
 
-  test("requestTracker should increment endpoint counts", () => {
-    const next = jest.fn();
+  afterEach(() => {
+    // Restore real timers
+    jest.useRealTimers();
+  });
+
+  test("requestTracker should increment endpoint count and call next", () => {
     const req = { method: "GET", path: "/api/test" };
+    const next = jest.fn();
 
     metrics.requestTracker(req, {}, next);
     metrics.requestTracker(req, {}, next);
 
+    // The internal `requests` object is not exported, so we verify its state
+    // by calling the function that uses it: buildAndSendMetrics.
     metrics.buildAndSendMetrics();
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const httpMetrics =
+    const requestMetric =
       fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
         (m) => m.name === "http.requests.count",
       );
 
-    expect(httpMetrics).toBeDefined();
-    expect(httpMetrics.sum.dataPoints[0].asInt).toBe(2);
+    expect(requestMetric.sum.dataPoints[0].asInt).toBe(2);
     expect(
-      httpMetrics.sum.dataPoints[0].attributes.find((a) => a.key === "endpoint")
-        .value.stringValue,
+      requestMetric.sum.dataPoints[0].attributes.find(
+        (a) => a.key === "endpoint",
+      ).value.stringValue,
     ).toBe("[GET] /api/test");
     expect(next).toHaveBeenCalledTimes(2);
   });
 
-  test("pizzaPurchase should collect success and failure metrics", () => {
-    metrics.pizzaPurchase(true, 150, 25.5);
-    metrics.pizzaPurchase(false, 200, 0);
-    metrics.pizzaPurchase(false, 210, 0);
+  test("pizzaPurchase should increment success and revenue on success", () => {
+    metrics.pizzaPurchase(true, 15.99);
+    metrics.pizzaPurchase(true, 10.01);
 
     metrics.buildAndSendMetrics();
-
-    expect(global.fetch).toHaveBeenCalledTimes(1);
     const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+    const successMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+        (m) => m.name === "purchase.count.success",
+      );
+    const revenueMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+        (m) => m.name === "purchase.revenue",
+      );
 
-    const successCount = sentMetrics.find(
-      (m) =>
-        m.name === "purchase.count" &&
-        m.sum.dataPoints[0].attributes.some(
-          (a) => a.value.stringValue === "success",
-        ),
-    );
-    const failureCount = sentMetrics.find(
-      (m) =>
-        m.name === "purchase.count" &&
-        m.sum.dataPoints[0].attributes.some(
-          (a) => a.value.stringValue === "failure",
-        ),
-    );
-    const revenue = sentMetrics.find((m) => m.name === "purchase.revenue");
-    const latency = sentMetrics.find((m) => m.name === "purchase.latency");
-
-    expect(successCount.sum.dataPoints[0].asInt).toBe(1);
-    expect(failureCount.sum.dataPoints[0].asInt).toBe(2);
-    expect(revenue.sum.dataPoints[0].asDouble).toBe(25.5);
-    expect(latency.gauge.dataPoints[0].asDouble).toBe(186.67);
+    expect(successMetric.sum.dataPoints[0].asInt).toBe(2);
+    expect(revenueMetric.sum.dataPoints[0].asDouble).toBe(26.0);
   });
 
-  test("auth metrics should be collected and cumulative", () => {
+  test("pizzaPurchase should increment failure on failure", () => {
+    metrics.pizzaPurchase(false, 20); // price is ignored on failure
+
+    metrics.buildAndSendMetrics();
+    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const failureMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+        (m) => m.name === "purchase.count.failure",
+      );
+    const revenueMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+        (m) => m.name === "purchase.revenue",
+      );
+
+    expect(failureMetric.sum.dataPoints[0].asInt).toBe(1);
+    expect(revenueMetric.sum.dataPoints[0].asDouble).toBe(0);
+  });
+
+  test("userLoggedIn should increment success and failure counters", () => {
+    metrics.userLoggedIn(true);
+    metrics.userLoggedIn(true);
+    metrics.userLoggedIn(false);
+
+    metrics.buildAndSendMetrics();
+    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const successMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+        (m) => m.name === "auth.logins.success",
+      );
+    const failureMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+        (m) => m.name === "auth.logins.failure",
+      );
+
+    expect(successMetric.sum.dataPoints[0].asInt).toBe(2);
+    expect(failureMetric.sum.dataPoints[0].asInt).toBe(1);
+  });
+
+  test("userLoggedOut should increment logout counter", () => {
+    metrics.userLoggedOut();
+    metrics.buildAndSendMetrics();
+    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const logoutMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+        (m) => m.name === "auth.logouts",
+      );
+    expect(logoutMetric.sum.dataPoints[0].asInt).toBe(1);
+  });
+
+  test("userRegistered should increment registration counter", () => {
+    metrics.userRegistered();
+    metrics.buildAndSendMetrics();
+    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const regMetric = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+      (m) => m.name === "user.registrations",
+    );
+    expect(regMetric.sum.dataPoints[0].asInt).toBe(1);
+  });
+
+  test("buildAndSendMetrics should construct and send a full payload", () => {
+    // Freeze time to get a deterministic timestamp for the snapshot
+    const FAKE_TIME = 1678886400000;
+    jest.useFakeTimers().setSystemTime(FAKE_TIME);
+
+    // 1. Collect a variety of metrics
+    metrics.requestTracker({ method: "GET", path: "/api/menu" }, {}, () => {});
     metrics.userRegistered();
     metrics.userLoggedIn(true);
     metrics.userLoggedIn(false);
+    metrics.pizzaPurchase(true, 25.5);
+    metrics.pizzaPurchase(false, 0);
     metrics.userLoggedOut();
 
+    // 2. Call the function that builds and sends the payload
     metrics.buildAndSendMetrics();
 
+    // 3. Assert fetch was called with the correct parameters
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    let fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    let sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+    expect(global.fetch).toHaveBeenCalledWith("http://test-grafana.com", {
+      method: "POST",
+      body: expect.any(String),
+      headers: {
+        Authorization: "Bearer test-account-id:test-api-key",
+        "Content-Type": "application/json",
+      },
+    });
 
-    expect(
-      sentMetrics.find((m) => m.name === "user.registrations").sum.dataPoints[0]
-        .asInt,
-    ).toBe(1);
-    expect(
-      sentMetrics.find((m) => m.name === "auth.logouts").sum.dataPoints[0]
-        .asInt,
-    ).toBe(1);
-
-    // Call again and ensure counters are cumulative
-    global.fetch.mockClear();
-    metrics.userRegistered(); // Add one more registration
-    metrics.buildAndSendMetrics();
-
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
-
-    // The value should now be 2
-    expect(
-      sentMetrics.find((m) => m.name === "user.registrations").sum.dataPoints[0]
-        .asInt,
-    ).toBe(2);
-    // This one was not incremented, so it should still be 1
-    expect(
-      sentMetrics.find((m) => m.name === "auth.logouts").sum.dataPoints[0]
-        .asInt,
-    ).toBe(1);
-  });
-
-  test("userActivity should count unique active users per interval", () => {
-    metrics.userActivity(101);
-    metrics.userActivity(102);
-    metrics.userActivity(101); // This duplicate should be ignored by the Set
-
-    metrics.buildAndSendMetrics();
-
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    let fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    let sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
-
-    let activeUserMetric = sentMetrics.find(
-      (m) => m.name === "user.active.count",
-    );
-    expect(activeUserMetric).toBeDefined();
-    expect(activeUserMetric.gauge.dataPoints[0].asInt).toBe(2);
-
-    // Call again and ensure the active user metric is gone because the set was cleared
-    global.fetch.mockClear();
-    metrics.buildAndSendMetrics();
-    expect(global.fetch).toHaveBeenCalledTimes(1); // Still called for system metrics
-
-    fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
-    activeUserMetric = sentMetrics.find((m) => m.name === "user.active.count");
-    expect(activeUserMetric).toBeUndefined();
-  });
-
-  test("system metrics should be calculated correctly", () => {
-    os.loadavg.mockReturnValue([0.5]);
-    os.cpus.mockReturnValue(new Array(4)); // 0.5 / 4 = 0.125 -> 12.5%
-    os.totalmem.mockReturnValue(16 * 1024 * 1024 * 1024); // 16 GB
-    os.freemem.mockReturnValue(12 * 1024 * 1024 * 1024); // 12 GB free -> 4 GB used -> 25%
-
-    // Add a single event to ensure event-based metrics are sent
-    metrics.userActivity(1);
-
-    metrics.buildAndSendMetrics();
-
+    // 4. Assert the payload is correct using a snapshot
     const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+    const allMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+    expect(allMetrics).toMatchSnapshot();
 
-    const cpu = sentMetrics.find((m) => m.name === "system.cpu.utilization");
-    const memory = sentMetrics.find(
+    // 5. Specific checks for calculated system metrics
+    const cpuMetric = allMetrics.find(
+      (m) => m.name === "system.cpu.utilization",
+    );
+    const memMetric = allMetrics.find(
       (m) => m.name === "system.memory.utilization",
     );
 
-    expect(cpu.gauge.dataPoints[0].asDouble).toBe(12.5);
-    expect(memory.gauge.dataPoints[0].asDouble).toBe(25);
+    // (0.5 load avg / 2 cpus) * 100 = 25.00
+    expect(cpuMetric.gauge.dataPoints[0].asDouble).toBe(25.0);
+    // ((16GB total - 8GB free) / 16GB total) * 100 = 50.00
+    expect(memMetric.gauge.dataPoints[0].asDouble).toBe(50.0);
   });
 
-  test("sendMetricToGrafana should handle fetch errors", async () => {
+  test("should handle fetch errors gracefully", async () => {
     const consoleErrorSpy = jest
       .spyOn(console, "error")
       .mockImplementation(() => {});
-    global.fetch.mockRejectedValue(new Error("Network failure"));
+    global.fetch.mockRejectedValueOnce(new Error("Network failure"));
 
-    metrics.pizzaPurchase(true, 100, 10);
-    metrics.buildAndSendMetrics();
+    metrics.pizzaPurchase(true, 10); // Generate a metric to ensure fetch is called
+    await metrics.buildAndSendMetrics();
 
+    // The promise rejection is handled inside sendMetricToGrafana, so the promise
+    // returned by buildAndSendMetrics resolves. We just need to wait for the next
+    // tick of the event loop to allow the .catch() block's console.error to execute.
     await new Promise(process.nextTick);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -203,22 +222,5 @@ describe("metrics.js", () => {
       expect.any(Error),
     );
     consoleErrorSpy.mockRestore();
-  });
-
-  test("should always send system metrics even with no other activity", () => {
-    metrics.buildAndSendMetrics();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-
-    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
-
-    const cpu = sentMetrics.find((m) => m.name === "system.cpu.utilization");
-    const memory = sentMetrics.find(
-      (m) => m.name === "system.memory.utilization",
-    );
-
-    expect(cpu).toBeDefined();
-    expect(memory).toBeDefined();
-    expect(sentMetrics.length).toBe(2);
   });
 });

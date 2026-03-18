@@ -1,0 +1,228 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`metrics buildAndSendMetrics should construct and send a full payload 1`] = `
+[
+  {
+    "name": "http.requests.count",
+    "sum": {
+      "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      "dataPoints": [
+        {
+          "asInt": 1,
+          "attributes": [
+            {
+              "key": "endpoint",
+              "value": {
+                "stringValue": "[GET] /api/menu",
+              },
+            },
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+      "isMonotonic": true,
+    },
+    "unit": "1",
+  },
+  {
+    "name": "user.registrations",
+    "sum": {
+      "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      "dataPoints": [
+        {
+          "asInt": 1,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+      "isMonotonic": true,
+    },
+    "unit": "1",
+  },
+  {
+    "name": "auth.logins.success",
+    "sum": {
+      "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      "dataPoints": [
+        {
+          "asInt": 1,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+      "isMonotonic": true,
+    },
+    "unit": "1",
+  },
+  {
+    "name": "auth.logins.failure",
+    "sum": {
+      "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      "dataPoints": [
+        {
+          "asInt": 1,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+      "isMonotonic": true,
+    },
+    "unit": "1",
+  },
+  {
+    "name": "auth.logouts",
+    "sum": {
+      "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      "dataPoints": [
+        {
+          "asInt": 1,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+      "isMonotonic": true,
+    },
+    "unit": "1",
+  },
+  {
+    "name": "purchase.count.success",
+    "sum": {
+      "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      "dataPoints": [
+        {
+          "asInt": 1,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+      "isMonotonic": true,
+    },
+    "unit": "1",
+  },
+  {
+    "name": "purchase.count.failure",
+    "sum": {
+      "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      "dataPoints": [
+        {
+          "asInt": 1,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+      "isMonotonic": true,
+    },
+    "unit": "1",
+  },
+  {
+    "name": "purchase.revenue",
+    "sum": {
+      "aggregationTemporality": "AGGREGATION_TEMPORALITY_CUMULATIVE",
+      "dataPoints": [
+        {
+          "asDouble": 25.5,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+      "isMonotonic": true,
+    },
+    "unit": "USD",
+  },
+  {
+    "gauge": {
+      "dataPoints": [
+        {
+          "asDouble": 25,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+    },
+    "name": "system.cpu.utilization",
+    "unit": "%",
+  },
+  {
+    "gauge": {
+      "dataPoints": [
+        {
+          "asDouble": 50,
+          "attributes": [
+            {
+              "key": "source",
+              "value": {
+                "stringValue": "test-service",
+              },
+            },
+          ],
+          "timeUnixNano": 1678886400000000000,
+        },
+      ],
+    },
+    "name": "system.memory.utilization",
+    "unit": "%",
+  },
+]
+`;

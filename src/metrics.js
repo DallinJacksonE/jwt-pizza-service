@@ -192,9 +192,10 @@ function buildAndSendMetrics() {
         {},
       ),
     );
-    sendMetricToGrafana(metrics);
+    return sendMetricToGrafana(metrics);
   } catch (error) {
     console.error("Error building or sending metrics:", error);
+    return Promise.reject(error);
   }
 }
 
@@ -253,7 +254,7 @@ function createMetric(
  */
 function sendMetricToGrafana(metrics) {
   if (metrics.length === 0) {
-    return;
+    return Promise.resolve();
   }
   const body = {
     resourceMetrics: [
@@ -267,7 +268,7 @@ function sendMetricToGrafana(metrics) {
     ],
   };
 
-  fetch(`${config.metrics.endpointUrl}`, {
+  return fetch(`${config.metrics.endpointUrl}`, {
     method: "POST",
     body: JSON.stringify(body),
     headers: {
@@ -292,5 +293,5 @@ module.exports = {
   userLoggedIn,
   userLoggedOut,
   userRegistered,
-  buildAndSendMetrics, // Exported for testing
+  buildAndSendMetrics,
 };
