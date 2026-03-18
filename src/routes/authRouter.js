@@ -57,7 +57,6 @@ async function setAuthUser(req, res, next) {
         req.user = jwt.verify(token, config.jwtSecret);
         req.user.isRole = (role) =>
           !!req.user.roles.find((r) => r.role === role);
-        metrics.userActivity(req.user.id);
       }
     } catch {
       req.user = null;

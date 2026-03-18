@@ -1,35 +1,36 @@
 const config = require("./config");
 const os = require("os");
 
-// Metrics stored in memory
-
 // --- Cumulative Metrics (never reset) ---
 const requests = {};
-// --- Interval-based Metrics (reset after each send) ---
+// All counters are cumulative and are never reset.
 let purchaseSuccessCount = 0;
 let purchaseFailureCount = 0;
 let totalPurchaseValue = 0;
-let purchaseLatencySum = 0;
-let purchaseCount = 0;
 let loginSuccessCount = 0;
 let loginFailureCount = 0;
 let logoutCount = 0;
 let userRegistrationCount = 0;
-let activeUsers = new Set();
 
 // =================================================================================
 // Metric Collection Functions
 // =================================================================================
 
+/**
+ * Middleware to track requests for each endpoint.
+ */
 function requestTracker(req, res, next) {
   const endpoint = `[${req.method}] ${req.path}`;
   requests[endpoint] = (requests[endpoint] || 0) + 1;
   next();
 }
 
-function pizzaPurchase(success, latency, price) {
-  purchaseCount++;
-  purchaseLatencySum += latency;
+/**
+ * Tracks successful and failed pizza purchases.
+ * @param {boolean} success Whether the purchase was successful.
+ * @param {number} price The total price of the purchase.
+ */
+function pizzaPurchase(success, price) {
   if (success) {
     purchaseSuccessCount++;
     totalPurchaseValue += price;
@@ -38,6 +39,10 @@ function pizzaPurchase(success, latency, price) {
   }
 }
 
+/**
+ * Tracks successful and failed user logins.
+ * @param {boolean} success
+ */
 function userLoggedIn(success) {
   if (success) {
     loginSuccessCount++;
@@ -46,18 +51,18 @@ function userLoggedIn(success) {
   }
 }
 
+/**
+ * Tracks user logouts.
+ */
 function userLoggedOut() {
   logoutCount++;
 }
 
+/**
+ * Tracks new user registrations.
+ */
 function userRegistered() {
   userRegistrationCount++;
-}
-
-function userActivity(userId) {
-  if (userId) {
-    activeUsers.add(userId);
-  }
 }
 
 // =================================================================================
@@ -83,13 +88,13 @@ function getMemoryUsagePercentage() {
 
 /**
  * This function runs periodically to gather all collected metrics,
- * format them, and send them to Grafana.
+ * format them, and send them to Grafana. All counters are cumulative.
  */
 function buildAndSendMetrics() {
   try {
     const metrics = [];
 
-    // 1. HTTP Metrics (from middleware)
+    // 1. HTTP Request Metrics
     Object.keys(requests).forEach((endpoint) => {
       metrics.push(
         createMetric(
@@ -105,100 +110,68 @@ function buildAndSendMetrics() {
       );
     });
 
-    // 3. User & Auth Metrics
-    if (userRegistrationCount > 0) {
-      metrics.push(
-        createMetric(
-          "user.registrations",
-          userRegistrationCount,
-          "1",
-          "sum",
-          "asInt",
-          {},
-        ),
-      );
-    }
-    if (loginSuccessCount > 0) {
-      metrics.push(
-        createMetric("auth.logins", loginSuccessCount, "1", "sum", "asInt", {
-          result: "success",
-        }),
-      );
-    }
-    if (loginFailureCount > 0) {
-      metrics.push(
-        createMetric("auth.logins", loginFailureCount, "1", "sum", "asInt", {
-          result: "failure",
-        }),
-      );
-    }
-    if (logoutCount > 0) {
-      metrics.push(
-        createMetric("auth.logouts", logoutCount, "1", "sum", "asInt", {}),
-      );
-    }
+    // 2. User & Auth Metrics
+    metrics.push(
+      createMetric(
+        "user.registrations",
+        userRegistrationCount,
+        "1",
+        "sum",
+        "asInt",
+      ),
+    );
+    metrics.push(
+      createMetric(
+        "auth.logins.success",
+        loginSuccessCount,
+        "1",
+        "sum",
+        "asInt",
+      ),
+    );
+    metrics.push(
+      createMetric(
+        "auth.logins.failure",
+        loginFailureCount,
+        "1",
+        "sum",
+        "asInt",
+      ),
+    );
+    metrics.push(
+      createMetric("auth.logouts", logoutCount, "1", "sum", "asInt"),
+    );
 
-    // 4. Purchase Metrics
-    if (purchaseCount > 0) {
-      metrics.push(
-        createMetric(
-          "purchase.count",
-          purchaseSuccessCount,
-          "1",
-          "sum",
-          "asInt",
-          { result: "success" },
-        ),
-      );
-      metrics.push(
-        createMetric(
-          "purchase.count",
-          purchaseFailureCount,
-          "1",
-          "sum",
-          "asInt",
-          { result: "failure" },
-        ),
-      );
-      metrics.push(
-        createMetric(
-          "purchase.revenue",
-          totalPurchaseValue,
-          "USD",
-          "sum",
-          "asDouble",
-          {},
-        ),
-      );
+    // 3. Purchase Metrics
+    metrics.push(
+      createMetric(
+        "purchase.count.success",
+        purchaseSuccessCount,
+        "1",
+        "sum",
+        "asInt",
+      ),
+    );
+    metrics.push(
+      createMetric(
+        "purchase.count.failure",
+        purchaseFailureCount,
+        "1",
+        "sum",
+        "asInt",
+      ),
+    );
+    metrics.push(
+      createMetric(
+        "purchase.revenue",
+        totalPurchaseValue,
+        "USD",
+        "sum",
+        "asDouble",
+      ),
+    );
 
-      const avgLatency = purchaseLatencySum / purchaseCount;
-      metrics.push(
-        createMetric(
-          "purchase.latency",
-          avgLatency.toFixed(2),
-          "ms",
-          "gauge",
-          "asDouble",
-          {},
-        ),
-      );
-    }
-
-    if (activeUsers.size > 0) {
-      metrics.push(
-        createMetric(
-          "user.active.count",
-          activeUsers.size,
-          "1",
-          "gauge",
-          "asInt",
-          {},
-        ),
-      );
-      activeUsers.clear();
-    }
-
-    // Always include system metrics and send whatever has been collected.
+    // 4. System Metrics (Gauges)
     metrics.push(
       createMetric(
         "system.cpu.utilization",
@@ -221,7 +194,7 @@ function buildAndSendMetrics() {
     );
     sendMetricToGrafana(metrics);
   } catch (error) {
-    console.error("Error sending metrics", error);
+    console.error("Error building or sending metrics:", error);
   }
 }
 
@@ -232,13 +205,6 @@ if (process.env.NODE_ENV !== "test") {
 
 /**
  * Creates a metric object in the OTLP JSON format that Grafana expects.
- * @param {string} metricName The name of the metric.
- * @param {number|string} metricValue The value of the metric.
- * @param {string} metricUnit The unit of the metric (e.g., 'ms', '1' for count).
- * @param {'sum'|'gauge'} metricType The type of metric.
- * @param {'asInt'|'asDouble'} valueType The data type of the value.
- * @param {object} attributes A key-value object for metric attributes.
- * @returns {object} The formatted metric object.
  */
 function createMetric(
   metricName,
@@ -246,8 +212,7 @@ function createMetric(
   metricUnit,
   metricType,
   valueType,
-  attributes,
-  temporality = "CUMULATIVE",
+  attributes = {},
 ) {
   attributes = { ...attributes, source: config.metrics.source };
 
@@ -276,13 +241,16 @@ function createMetric(
   });
 
   if (metricType === "sum") {
-    metric.sum.aggregationTemporality = `AGGREGATION_TEMPORALITY_${temporality}`;
+    metric.sum.aggregationTemporality = "AGGREGATION_TEMPORALITY_CUMULATIVE";
     metric.sum.isMonotonic = true;
   }
 
   return metric;
 }
 
+/**
+ * Sends the formatted metrics payload to Grafana.
+ */
 function sendMetricToGrafana(metrics) {
   if (metrics.length === 0) {
     return;
@@ -324,6 +292,5 @@ module.exports = {
   userLoggedIn,
   userLoggedOut,
   userRegistered,
-  userActivity,
   buildAndSendMetrics, // Exported for testing
 };
