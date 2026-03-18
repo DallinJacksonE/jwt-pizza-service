@@ -18,19 +18,23 @@ trap cleanup SIGINT
 
 # Wrap curl command to return HTTP response codes
 execute_curl() {
-  echo $(eval "curl -s -o /dev/null -w \"%{http_code}\" $1")
+  curl -s -o /dev/null -w "%{http_code}" "$@"
 }
 
 # Function to login and get a token
 login() {
-  response=$(curl -s -X PUT $host/api/auth -d "{\"email\":\"$1\", \"password\":\"$2\"}" -H 'Content-Type: application/json')
-  token=$(echo $response | jq -r '.token')
-  echo $token
+  response=$(curl -s -X PUT "$host/api/auth" -d "{\"email\":\"$1\", \"password\":\"$2\"}" -H 'Content-Type: application/json')
+  # Check if curl failed or returned an error message instead of JSON
+  if ! [[ "$response" == *"token"* ]]; then
+    echo ""
+    return
+  fi
+  echo "$response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4
 }
 
 # Simulate a user requesting the menu every 3 seconds
 while true; do
-  result=$(execute_curl $host/api/order/menu)
+  result=$(execute_curl "$host/api/order/menu")
   echo "Requesting menu..." $result
   sleep 3
 done &
@@ -38,7 +42,7 @@ pid1=$!
 
 # Simulate a user with an invalid email and password every 25 seconds
 while true; do
-  result=$(execute_curl "-X PUT \"$host/api/auth\" -d '{\"email\":\"unknown@jwt.com\", \"password\":\"bad\"}' -H 'Content-Type: application/json'")
+  result=$(execute_curl -X PUT "$host/api/auth" -d '{"email":"unknown@jwt.com", "password":"bad"}' -H 'Content-Type: application/json')
   echo "Logging in with invalid credentials..." $result
   sleep 25
 done &
@@ -49,7 +53,7 @@ while true; do
   token=$(login "f@jwt.com" "franchisee")
   echo "Login franchisee..." $( [ -z "$token" ] && echo "false" || echo "true" )
   sleep 110
-  result=$(execute_curl "-X DELETE $host/api/auth -H \"Authorization: Bearer $token\"")
+  result=$(execute_curl -X DELETE "$host/api/auth" -H "Authorization: Bearer $token")
   echo "Logging out franchisee..." $result
   sleep 10
 done &
@@ -59,10 +63,10 @@ pid3=$!
 while true; do
   token=$(login "d@jwt.com" "diner")
   echo "Login diner..." $( [ -z "$token" ] && echo "false" || echo "true" )
-  result=$(execute_curl "-X POST $host/api/order -H 'Content-Type: application/json' -d '{\"franchiseId\": 1, \"storeId\":1, \"items\":[{ \"menuId\": 1, \"description\": \"Veggie\", \"price\": 0.05 }]}'  -H \"Authorization: Bearer $token\"")
+  result=$(execute_curl -X POST "$host/api/order" -H 'Content-Type: application/json' -d '{"franchiseId": 1, "storeId":1, "items":[{ "menuId": 1, "description": "Veggie", "price": 0.05 }]}' -H "Authorization: Bearer $token")
   echo "Bought a pizza..." $result
   sleep 20
-  result=$(execute_curl "-X DELETE $host/api/auth -H \"Authorization: Bearer $token\"")
+  result=$(execute_curl -X DELETE "$host/api/auth" -H "Authorization: Bearer $token")
   echo "Logging out diner..." $result
   sleep 30
 done &
@@ -78,10 +82,10 @@ while true; do
   do items+=', { "menuId": 1, "description": "Veggie", "price": 0.05 }'
   done
   
-  result=$(execute_curl "-X POST $host/api/order -H 'Content-Type: application/json' -d '{\"franchiseId\": 1, \"storeId\":1, \"items\":[$items]}'  -H \"Authorization: Bearer $token\"")
+  result=$(execute_curl -X POST "$host/api/order" -H 'Content-Type: application/json' -d "{\"franchiseId\": 1, \"storeId\":1, \"items\":[$items]}" -H "Authorization: Bearer $token")
   echo "Bought too many pizzas..." $result  
   sleep 5
-  result=$(execute_curl "-X DELETE $host/api/auth -H \"Authorization: Bearer $token\"")
+  result=$(execute_curl -X DELETE "$host/api/auth" -H "Authorization: Bearer $token")
   echo "Logging out hungry diner..." $result
   sleep 295
 done &

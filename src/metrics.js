@@ -115,26 +115,51 @@ function buildAndSendMetrics() {
           "sum",
           "asInt",
           {},
+          "DELTA",
         ),
       );
     }
     if (loginSuccessCount > 0) {
       metrics.push(
-        createMetric("auth.logins", loginSuccessCount, "1", "sum", "asInt", {
-          result: "success",
-        }),
+        createMetric(
+          "auth.logins",
+          loginSuccessCount,
+          "1",
+          "sum",
+          "asInt",
+          {
+            result: "success",
+          },
+          "DELTA",
+        ),
       );
     }
     if (loginFailureCount > 0) {
       metrics.push(
-        createMetric("auth.logins", loginFailureCount, "1", "sum", "asInt", {
-          result: "failure",
-        }),
+        createMetric(
+          "auth.logins",
+          loginFailureCount,
+          "1",
+          "sum",
+          "asInt",
+          {
+            result: "failure",
+          },
+          "DELTA",
+        ),
       );
     }
     if (logoutCount > 0) {
       metrics.push(
-        createMetric("auth.logouts", logoutCount, "1", "sum", "asInt", {}),
+        createMetric(
+          "auth.logouts",
+          logoutCount,
+          "1",
+          "sum",
+          "asInt",
+          {},
+          "DELTA",
+        ),
       );
     }
 
@@ -148,6 +173,7 @@ function buildAndSendMetrics() {
           "sum",
           "asInt",
           { result: "success" },
+          "DELTA",
         ),
       );
       metrics.push(
@@ -158,6 +184,7 @@ function buildAndSendMetrics() {
           "sum",
           "asInt",
           { result: "failure" },
+          "DELTA",
         ),
       );
       metrics.push(
@@ -168,6 +195,7 @@ function buildAndSendMetrics() {
           "sum",
           "asDouble",
           {},
+          "DELTA",
         ),
       );
 
@@ -261,6 +289,7 @@ function createMetric(
   metricType,
   valueType,
   attributes,
+  temporality = "CUMULATIVE",
 ) {
   attributes = { ...attributes, source: config.metrics.source };
 
@@ -289,7 +318,7 @@ function createMetric(
   });
 
   if (metricType === "sum") {
-    metric.sum.aggregationTemporality = "AGGREGATION_TEMPORALITY_CUMULATIVE";
+    metric.sum.aggregationTemporality = `AGGREGATION_TEMPORALITY_${temporality}`;
     metric.sum.isMonotonic = true;
   }
 
