@@ -199,11 +199,6 @@ function buildAndSendMetrics() {
   }
 }
 
-// Do not run the metrics sending interval when in a test environment
-if (process.env.NODE_ENV !== "test") {
-  setInterval(buildAndSendMetrics, 10000);
-}
-
 /**
  * Creates a metric object in the OTLP JSON format that Grafana expects.
  */
@@ -252,7 +247,7 @@ function createMetric(
 /**
  * Sends the formatted metrics payload to Grafana.
  */
-function sendMetricToGrafana(metrics) {
+async function sendMetricToGrafana(metrics) {
   if (metrics.length === 0) {
     return Promise.resolve();
   }
@@ -268,24 +263,28 @@ function sendMetricToGrafana(metrics) {
     ],
   };
 
-  return fetch(`${config.metrics.endpointUrl}`, {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: {
-      Authorization: `Bearer ${config.metrics.accountId}:${config.metrics.apiKey}`,
-      "Content-Type": "application/json",
-    },
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        const responseBody = await response.text();
-        throw new Error(`HTTP status ${response.status}: ${responseBody}`);
-      }
-    })
-    .catch((error) => {
-      console.error("Error pushing metrics:", error);
+  try {
+    const response = await fetch(`${config.metrics.endpointUrl}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: {
+        Authorization: `Bearer ${config.metrics.accountId}:${config.metrics.apiKey}`,
+        "Content-Type": "application/json",
+      },
     });
+    if (!response.ok) {
+      const responseBody = await response.text();
+      throw new Error(`HTTP status ${response.status}: ${responseBody}`);
+    }
+    console.log(`Metrics Sent: ${response}`);
+  } catch (error) {
+    console.error("Error pushing metrics:", error);
+  }
 }
+
+setInterval(() => {
+  buildAndSendMetrics();
+}, 5000);
 
 module.exports = {
   requestTracker,

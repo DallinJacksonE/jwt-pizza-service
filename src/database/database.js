@@ -477,17 +477,17 @@ class DB {
   }
 
   async _getConnection(setUse = true) {
-    const connection = await mysql.createConnection({
+    const connectionConfig = {
       host: config.db.connection.host,
       user: config.db.connection.user,
       password: config.db.connection.password,
       connectTimeout: config.db.connection.connectTimeout,
       decimalNumbers: true,
-    });
+    };
     if (setUse) {
-      await connection.query(`USE ${config.db.connection.database}`);
+      connectionConfig.database = config.db.connection.database;
     }
-    return connection;
+    return mysql.createConnection(connectionConfig);
   }
 
   async initializeDatabase() {
@@ -502,7 +502,9 @@ class DB {
         await connection.query(
           `CREATE DATABASE IF NOT EXISTS ${config.db.connection.database}`,
         );
-        await connection.query(`USE ${config.db.connection.database}`);
+        await connection.changeUser({
+          database: config.db.connection.database,
+        });
 
         if (!dbExists) {
           console.log("Successfully created database");
@@ -519,7 +521,7 @@ class DB {
             password: "admin",
             roles: [{ role: Role.Admin }],
           };
-          this.addUser(defaultAdmin);
+          await this.addUser(defaultAdmin);
         }
       } finally {
         connection.end();
