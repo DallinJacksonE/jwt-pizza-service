@@ -90,7 +90,7 @@ function getMemoryUsagePercentage() {
  * This function runs periodically to gather all collected metrics,
  * format them, and send them to Grafana. All counters are cumulative.
  */
-function buildAndSendMetrics() {
+async function buildAndSendMetrics() {
   try {
     const metrics = [];
 
@@ -192,7 +192,7 @@ function buildAndSendMetrics() {
         {},
       ),
     );
-    return sendMetricToGrafana(metrics);
+    return await sendMetricToGrafana(metrics);
   } catch (error) {
     console.error("Error building or sending metrics:", error);
     return Promise.reject(error);
@@ -282,9 +282,11 @@ async function sendMetricToGrafana(metrics) {
   }
 }
 
-setInterval(() => {
-  buildAndSendMetrics();
-}, 5000);
+if (process.env.NODE_ENV !== "test") {
+  setInterval(async () => {
+    await buildAndSendMetrics();
+  }, 5000);
+}
 
 module.exports = {
   requestTracker,

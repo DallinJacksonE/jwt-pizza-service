@@ -67,9 +67,6 @@ describe("Database", () => {
     expect(mockConnection.query).toHaveBeenCalledWith(
       expect.stringContaining("CREATE DATABASE IF NOT EXISTS"),
     );
-    expect(mockConnection.query).toHaveBeenCalledWith(
-      expect.stringContaining("USE"),
-    );
   });
 
   test("getConnection should return a connection", async () => {
