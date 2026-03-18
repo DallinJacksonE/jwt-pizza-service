@@ -122,14 +122,37 @@ describe("metrics.js", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  test("userActivity should count unique active users and reset", () => {
+    metrics.userActivity(101);
+    metrics.userActivity(102);
+    metrics.userActivity(101); // This duplicate should be ignored by the Set
+
+    metrics.buildAndSendMetrics();
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const sentMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
+
+    const activeUserMetric = sentMetrics.find(
+      (m) => m.name === "user.active.count",
+    );
+    expect(activeUserMetric).toBeDefined();
+    expect(activeUserMetric.gauge.dataPoints[0].asInt).toBe(2);
+
+    // Call again and ensure the metric is gone because the set was cleared
+    global.fetch.mockClear();
+    metrics.buildAndSendMetrics();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   test("system metrics should be calculated correctly", () => {
     os.loadavg.mockReturnValue([0.5]);
     os.cpus.mockReturnValue(new Array(4)); // 0.5 / 4 = 0.125 -> 12.5%
     os.totalmem.mockReturnValue(16 * 1024 * 1024 * 1024); // 16 GB
     os.freemem.mockReturnValue(12 * 1024 * 1024 * 1024); // 12 GB free -> 4 GB used -> 25%
 
-    // Add a single event to ensure metrics are sent
-    metrics.greetingChanged();
+    // Add a single event to ensure event-based metrics are sent
+    metrics.userActivity(1);
 
     metrics.buildAndSendMetrics();
 
@@ -143,30 +166,6 @@ describe("metrics.js", () => {
 
     expect(cpu.gauge.dataPoints[0].asDouble).toBe(12.5);
     expect(memory.gauge.dataPoints[0].asDouble).toBe(25);
-  });
-
-  test("cumulative counters (greeting, requests) should not be reset", () => {
-    metrics.greetingChanged();
-    metrics.buildAndSendMetrics();
-
-    metrics.greetingChanged();
-    metrics.buildAndSendMetrics();
-
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    const firstCallBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const secondCallBody = JSON.parse(global.fetch.mock.calls[1][1].body);
-
-    const firstGreeting =
-      firstCallBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
-        (m) => m.name === "greeting.change.count",
-      );
-    const secondGreeting =
-      secondCallBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
-        (m) => m.name === "greeting.change.count",
-      );
-
-    expect(firstGreeting.sum.dataPoints[0].asInt).toBe(1);
-    expect(secondGreeting.sum.dataPoints[0].asInt).toBe(2);
   });
 
   test("sendMetricToGrafana should handle fetch errors", async () => {

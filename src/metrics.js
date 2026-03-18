@@ -5,8 +5,6 @@ const os = require("os");
 
 // --- Cumulative Metrics (never reset) ---
 const requests = {};
-let greetingChangedCount = 0;
-
 // --- Interval-based Metrics (reset after each send) ---
 let purchaseSuccessCount = 0;
 let purchaseFailureCount = 0;
@@ -17,6 +15,7 @@ let loginSuccessCount = 0;
 let loginFailureCount = 0;
 let logoutCount = 0;
 let userRegistrationCount = 0;
+let activeUsers = new Set();
 
 // =================================================================================
 // Metric Collection Functions
@@ -26,10 +25,6 @@ function requestTracker(req, res, next) {
   const endpoint = `[${req.method}] ${req.path}`;
   requests[endpoint] = (requests[endpoint] || 0) + 1;
   next();
-}
-
-function greetingChanged() {
-  greetingChangedCount++;
 }
 
 function pizzaPurchase(success, latency, price) {
@@ -57,6 +52,12 @@ function userLoggedOut() {
 
 function userRegistered() {
   userRegistrationCount++;
+}
+
+function userActivity(userId) {
+  if (userId) {
+    activeUsers.add(userId);
+  }
 }
 
 // =================================================================================
@@ -183,14 +184,13 @@ function buildAndSendMetrics() {
       );
     }
 
-    // 5. Other custom metrics
-    if (greetingChangedCount > 0) {
+    if (activeUsers.size > 0) {
       metrics.push(
         createMetric(
-          "greeting.change.count",
-          greetingChangedCount,
+          "user.active.count",
+          activeUsers.size,
           "1",
-          "sum",
+          "gauge",
           "asInt",
           {},
         ),
@@ -233,6 +233,7 @@ function buildAndSendMetrics() {
     loginFailureCount = 0;
     logoutCount = 0;
     userRegistrationCount = 0;
+    activeUsers.clear();
   } catch (error) {
     console.error("Error sending metrics", error);
   }
@@ -332,10 +333,10 @@ function sendMetricToGrafana(metrics) {
 
 module.exports = {
   requestTracker,
-  greetingChanged,
   pizzaPurchase,
   userLoggedIn,
   userLoggedOut,
   userRegistered,
+  userActivity,
   buildAndSendMetrics, // Exported for testing
 };
