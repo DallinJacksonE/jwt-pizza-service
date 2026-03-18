@@ -268,7 +268,7 @@ async function sendMetricToGrafana(metrics) {
       method: "POST",
       body: JSON.stringify(body),
       headers: {
-        Authorization: `Basic ${Buffer.from(`${config.metrics.accountId}:${config.metrics.apiKey}`).toString("base64")}`,
+        Authorization: `Bearer ${config.metrics.accountId}:${config.metrics.apiKey}`,
         "Content-Type": "application/json",
       },
     });
