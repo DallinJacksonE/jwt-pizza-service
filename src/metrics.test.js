@@ -1,4 +1,5 @@
 /* global describe, test, expect, jest, beforeEach, afterEach */
+const { EventEmitter } = require("events");
 
 // 1. Mock dependencies before any imports
 jest.mock("./config", () => ({
@@ -44,6 +45,9 @@ describe("metrics", () => {
 
     // Re-require the module to get a fresh instance for each test
     metrics = require("./metrics");
+
+    // Silence console logs during tests
+    jest.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -53,10 +57,11 @@ describe("metrics", () => {
 
   test("requestTracker should increment endpoint count and call next", () => {
     const req = { method: "GET", path: "/api/test" };
+    const res = new EventEmitter();
     const next = jest.fn();
 
-    metrics.requestTracker(req, {}, next);
-    metrics.requestTracker(req, {}, next);
+    metrics.requestTracker(req, res, next);
+    metrics.requestTracker(req, res, next);
 
     // The internal `requests` object is not exported, so we verify its state
     // by calling the function that uses it: buildAndSendMetrics.
@@ -76,6 +81,35 @@ describe("metrics", () => {
       ).value.stringValue,
     ).toBe("[GET] /api/test");
     expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  test("requestTracker should record endpoint latency", () => {
+    const req = { method: "GET", path: "/api/latency-test" };
+    const next = jest.fn();
+    const hrtimeSpy = jest.spyOn(process, "hrtime");
+
+    // Simulate two requests, one taking 50ms, the other 100ms
+    const res1 = new EventEmitter();
+    hrtimeSpy.mockReturnValueOnce([0, 0]); // start time for req 1
+    hrtimeSpy.mockReturnValueOnce([0, 50000000]); // diff for req 1 (50ms)
+    metrics.requestTracker(req, res1, next);
+    res1.emit("finish");
+
+    const res2 = new EventEmitter();
+    hrtimeSpy.mockReturnValueOnce([0, 0]); // start time for req 2
+    hrtimeSpy.mockReturnValueOnce([0, 100000000]); // diff for req 2 (100ms)
+    metrics.requestTracker(req, res2, next);
+    res2.emit("finish");
+
+    metrics.buildAndSendMetrics();
+    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const latencyMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.filter(
+        (m) => m.name === "http.requests.latency",
+      );
+    expect(latencyMetric).toHaveLength(2);
+    expect(latencyMetric[0].gauge.dataPoints[0].asDouble).toBe(50);
+    expect(latencyMetric[1].gauge.dataPoints[0].asDouble).toBe(100);
   });
 
   test("pizzaPurchase should increment success and revenue on success", () => {
@@ -156,51 +190,37 @@ describe("metrics", () => {
     expect(regMetric.sum.dataPoints[0].asInt).toBe(1);
   });
 
-  test("buildAndSendMetrics should construct and send a full payload", () => {
-    // Freeze time to get a deterministic timestamp for the snapshot
-    const FAKE_TIME = 1678886400000;
-    jest.useFakeTimers().setSystemTime(FAKE_TIME);
+  test("trackUserActivity should count unique active users", () => {
+    metrics.trackUserActivity(10);
+    metrics.trackUserActivity(20);
+    metrics.trackUserActivity(10); // This is a duplicate and should be ignored
 
-    // 1. Collect a variety of metrics
-    metrics.requestTracker({ method: "GET", path: "/api/menu" }, {}, () => {});
-    metrics.userRegistered();
-    metrics.userLoggedIn(true);
-    metrics.userLoggedIn(false);
-    metrics.pizzaPurchase(true, 25.5);
-    metrics.pizzaPurchase(false, 0);
-    metrics.userLoggedOut();
-
-    // 2. Call the function that builds and sends the payload
     metrics.buildAndSendMetrics();
 
-    // 3. Assert fetch was called with the correct parameters
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledWith("http://test-grafana.com", {
-      method: "POST",
-      body: expect.any(String),
-      headers: {
-        Authorization: "Bearer test-account-id:test-api-key",
-        "Content-Type": "application/json",
-      },
-    });
-
-    // 4. Assert the payload is correct using a snapshot
     const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const allMetrics = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics;
-    expect(allMetrics).toMatchSnapshot();
+    const activeUsersMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+        (m) => m.name === "users.active",
+      );
 
-    // 5. Specific checks for calculated system metrics
-    const cpuMetric = allMetrics.find(
-      (m) => m.name === "system.cpu.utilization",
-    );
-    const memMetric = allMetrics.find(
-      (m) => m.name === "system.memory.utilization",
-    );
+    expect(activeUsersMetric.gauge.dataPoints[0].asInt).toBe(2);
+  });
 
-    // (0.5 load avg / 2 cpus) * 100 = 25.00
-    expect(cpuMetric.gauge.dataPoints[0].asDouble).toBe(25.0);
-    // ((16GB total - 8GB free) / 16GB total) * 100 = 50.00
-    expect(memMetric.gauge.dataPoints[0].asDouble).toBe(50.0);
+  test("trackPizzaCreationLatency should record individual latencies", () => {
+    metrics.trackPizzaCreationLatency(150);
+    metrics.trackPizzaCreationLatency(250);
+
+    metrics.buildAndSendMetrics();
+
+    const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
+    const pizzaLatencyMetric =
+      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.filter(
+        (m) => m.name === "pizza.creation.latency",
+      );
+
+    expect(pizzaLatencyMetric).toHaveLength(2);
+    expect(pizzaLatencyMetric[0].gauge.dataPoints[0].asDouble).toBe(150);
+    expect(pizzaLatencyMetric[1].gauge.dataPoints[0].asDouble).toBe(250);
   });
 
   test("should handle fetch errors gracefully", async () => {

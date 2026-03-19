@@ -122,6 +122,7 @@ orderRouter.post(
       const order = await DB.addDinerOrder(req.user, orderReq);
       price = order.items.reduce((sum, item) => sum + (item.price || 0), 0);
 
+      const factoryStartTime = process.hrtime();
       const r = await fetch(`${config.factory.url}/api/order`, {
         method: "POST",
         headers: {
@@ -137,6 +138,11 @@ orderRouter.post(
           order,
         }),
       });
+      const factoryLatencyDiff = process.hrtime(factoryStartTime);
+      const factoryLatency =
+        factoryLatencyDiff[0] * 1e3 + factoryLatencyDiff[1] * 1e-6;
+      metrics.trackPizzaCreationLatency(factoryLatency);
+
       const j = await r.json();
       if (r.ok) {
         purchaseSuccessful = true;
@@ -148,7 +154,6 @@ orderRouter.post(
         });
       }
     } finally {
-      //const latency = Date.now() - startTime;
       metrics.pizzaPurchase(purchaseSuccessful, price);
     }
   }),

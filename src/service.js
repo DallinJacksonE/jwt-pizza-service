@@ -10,6 +10,12 @@ const metrics = require("./metrics");
 const app = express();
 app.use(express.json());
 app.use(setAuthUser);
+app.use((req, res, next) => {
+  if (req.user) {
+    metrics.trackUserActivity(req.user.id);
+  }
+  next();
+});
 app.use(metrics.requestTracker);
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");

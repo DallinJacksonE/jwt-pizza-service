@@ -3,6 +3,9 @@ const os = require("os");
 
 // --- Cumulative Metrics (never reset) ---
 const requests = {};
+const activeUsersInInterval = new Set();
+const endpointLatencies = {};
+const pizzaCreationLatencies = [];
 // All counters are cumulative and are never reset.
 let purchaseSuccessCount = 0;
 let purchaseFailureCount = 0;
@@ -17,11 +20,37 @@ let userRegistrationCount = 0;
 // =================================================================================
 
 /**
+ * Tracks a user as active for the current interval.
+ * @param {number} userId
+ */
+function trackUserActivity(userId) {
+  if (userId) {
+    activeUsersInInterval.add(userId);
+  }
+}
+
+/**
+ * Tracks the latency of a pizza creation call to the factory.
+ * @param {number} duration The duration in milliseconds.
+ */
+function trackPizzaCreationLatency(duration) {
+  pizzaCreationLatencies.push(duration);
+}
+
+/**
  * Middleware to track requests for each endpoint.
  */
 function requestTracker(req, res, next) {
+  const start = process.hrtime();
   const endpoint = `[${req.method}] ${req.path}`;
   requests[endpoint] = (requests[endpoint] || 0) + 1;
+
+  res.on("finish", () => {
+    const diff = process.hrtime(start);
+    const duration = diff[0] * 1e3 + diff[1] * 1e-6; // ms
+    if (!endpointLatencies[endpoint]) endpointLatencies[endpoint] = [];
+    endpointLatencies[endpoint].push(duration);
+  });
   next();
 }
 
@@ -192,6 +221,54 @@ async function buildAndSendMetrics() {
         {},
       ),
     );
+
+    // 5. Active Users
+    metrics.push(
+      createMetric(
+        "users.active",
+        activeUsersInInterval.size,
+        "1",
+        "gauge",
+        "asInt",
+      ),
+    );
+    activeUsersInInterval.clear();
+
+    // 6. Latency Metrics
+    Object.keys(endpointLatencies).forEach((endpoint) => {
+      const latencies = endpointLatencies[endpoint];
+      latencies.forEach((duration) => {
+        metrics.push(
+          createMetric(
+            "http.requests.latency",
+            duration,
+            "ms",
+            "gauge",
+            "asDouble",
+            { endpoint },
+          ),
+        );
+      });
+    });
+    // Clear for next interval
+    Object.keys(endpointLatencies).forEach(
+      (key) => delete endpointLatencies[key],
+    );
+
+    pizzaCreationLatencies.forEach((duration) => {
+      metrics.push(
+        createMetric(
+          "pizza.creation.latency",
+          duration,
+          "ms",
+          "gauge",
+          "asDouble",
+        ),
+      );
+    });
+    // Clear for next interval
+    pizzaCreationLatencies.length = 0;
+
     return await sendMetricToGrafana(metrics);
   } catch (error) {
     console.error("Error building or sending metrics:", error);
@@ -276,7 +353,7 @@ async function sendMetricToGrafana(metrics) {
       const responseBody = await response.text();
       throw new Error(`HTTP status ${response.status}: ${responseBody}`);
     }
-    console.log(`Metrics Sent: ${response}`);
+    console.log(`Metrics Sent: ${response.status}`);
   } catch (error) {
     console.error("Error pushing metrics:", error);
   }
@@ -289,6 +366,8 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 module.exports = {
+  trackPizzaCreationLatency,
+  trackUserActivity,
   requestTracker,
   pizzaPurchase,
   userLoggedIn,
