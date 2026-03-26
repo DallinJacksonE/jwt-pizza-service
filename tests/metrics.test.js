@@ -2,7 +2,7 @@
 const { EventEmitter } = require("events");
 
 // 1. Mock dependencies before any imports
-jest.mock("./config", () => ({
+jest.mock("../src/config", () => ({
   metrics: {
     source: "test-service",
     endpointUrl: "http://test-grafana.com",
@@ -44,7 +44,7 @@ describe("metrics", () => {
     os.freemem.mockReturnValue(8 * 1024 * 1024 * 1024); // 8GB
 
     // Re-require the module to get a fresh instance for each test
-    metrics = require("./metrics");
+    metrics = require("../src/metrics");
 
     // Silence console logs during tests
     jest.spyOn(console, "log").mockImplementation(() => {});

@@ -2,13 +2,13 @@
 
 const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
-const { DB, Role } = require("./database");
-const { StatusCodeError } = require("../endpointHelper");
+const { DB, Role } = require("../../src/database/database");
+const { StatusCodeError } = require("../../src/endpointHelper");
 
 // Mock dependencies
 jest.mock("mysql2/promise");
 jest.mock("bcryptjs");
-jest.mock("../config", () => ({
+jest.mock("../../src/config", () => ({
   db: {
     connection: {
       host: "localhost",

@@ -4,7 +4,7 @@ const request = require("supertest");
 const express = require("express");
 
 // 1. Mock the database with explicit .js extension
-jest.mock("../database/database.js", () => ({
+jest.mock("../../src/database/database.js", () => ({
   Role: {
     Admin: "admin",
     Diner: "diner",
@@ -18,14 +18,14 @@ jest.mock("../database/database.js", () => ({
 }));
 
 // 2. Mock authRouter with working middleware
-jest.mock("./authRouter.js", () => ({
+jest.mock("../../src/routes/authRouter.js", () => ({
   authRouter: {
     authenticateToken: jest.fn((req, res, next) => next()),
   },
 }));
 
 // 3. Mock config
-jest.mock("../config.js", () => ({
+jest.mock("../../src/config.js", () => ({
   factory: { url: "http://factory", apiKey: "key" },
   metrics: {
     source: "test-source",
@@ -35,9 +35,9 @@ jest.mock("../config.js", () => ({
 global.fetch = jest.fn();
 
 // 4. Require modules AFTER mocks
-const orderRouter = require("./orderRouter");
-const { DB } = require("../database/database.js");
-const { authRouter } = require("./authRouter.js");
+const orderRouter = require("../../src/routes/orderRouter.js");
+const { DB } = require("../../src/database/database.js");
+const { authRouter } = require("../../src/routes/authRouter.js");
 
 const app = express();
 app.use(express.json());
