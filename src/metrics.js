@@ -1,12 +1,11 @@
 const config = require("./config");
 const os = require("os");
 
+// --- Server Start Time (Required for OTLP Cumulative Metrics) ---
+const serverStartTime = Date.now();
+
 // --- Cumulative Metrics (never reset) ---
 const requests = {};
-const activeUsersInInterval = new Set();
-const endpointLatencies = {};
-const pizzaCreationLatencies = [];
-// All counters are cumulative and are never reset.
 let purchaseSuccessCount = 0;
 let purchaseFailureCount = 0;
 let totalPurchaseValue = 0;
@@ -14,6 +13,11 @@ let loginSuccessCount = 0;
 let loginFailureCount = 0;
 let logoutCount = 0;
 let userRegistrationCount = 0;
+
+// --- Interval Gauges (reset every 5 seconds) ---
+const activeUsersInInterval = new Set();
+const endpointLatencies = {};
+const pizzaCreationLatencies = [];
 
 // =================================================================================
 // Metric Collection Functions
@@ -58,10 +62,10 @@ function requestTracker(req, res, next) {
       : routePattern;
     const endpoint = `[${req.method}] ${fullRoute}`;
 
-    // Track Request Count
+    // Track Request Count (Cumulative)
     requests[endpoint] = (requests[endpoint] || 0) + 1;
 
-    // Track Latency
+    // Track Latency (Gauge for this interval)
     const diff = process.hrtime(start);
     const duration = diff[0] * 1e3 + diff[1] * 1e-6; // ms
     if (!endpointLatencies[endpoint]) endpointLatencies[endpoint] = [];
@@ -247,9 +251,9 @@ async function buildAndSendMetrics() {
         "asInt",
       ),
     );
-    activeUsersInInterval.clear();
+    activeUsersInInterval.clear(); // Clear gauge for next interval
 
-    // 6. Endpoint Latency Metrics (Aggregated)
+    // 6. Endpoint Latency Metrics (Aggregated Gauges)
     Object.keys(endpointLatencies).forEach((endpoint) => {
       const latencies = endpointLatencies[endpoint];
       if (latencies.length > 0) {
@@ -280,7 +284,7 @@ async function buildAndSendMetrics() {
       }
     });
 
-    // 7. Pizza Creation Latency (Aggregated)
+    // 7. Pizza Creation Latency (Aggregated Gauges)
     if (pizzaCreationLatencies.length > 0) {
       const total = pizzaCreationLatencies.reduce((sum, val) => sum + val, 0);
       const avg = total / pizzaCreationLatencies.length;
@@ -306,18 +310,9 @@ async function buildAndSendMetrics() {
       );
     }
 
-    // --- RESET ALL COUNTERS FOR DELTA TIMING ---
-    purchaseSuccessCount = 0;
-    purchaseFailureCount = 0;
-    totalPurchaseValue = 0;
-    loginSuccessCount = 0;
-    loginFailureCount = 0;
-    logoutCount = 0;
-    userRegistrationCount = 0;
+    // --- ONLY CLEAR GAUGES FOR NEXT INTERVAL ---
+    // Do NOT reset cumulative counters (purchases, logins, requests, etc.)
     pizzaCreationLatencies.length = 0;
-
-    // Clear the objects completely
-    Object.keys(requests).forEach((key) => delete requests[key]);
     Object.keys(endpointLatencies).forEach(
       (key) => delete endpointLatencies[key],
     );
@@ -345,7 +340,8 @@ function createMetric(
   // Calculate timestamps once for consistency
   const nowMs = Date.now();
   const timeUnixNano = nowMs * 1000000;
-  const startTimeUnixNano = (nowMs - 5000) * 1000000; // 5 seconds ago
+  // Use the server start time for cumulative metrics
+  const startTimeUnixNano = serverStartTime * 1000000;
 
   const metric = {
     name: metricName,
@@ -358,7 +354,6 @@ function createMetric(
               ? parseInt(metricValue, 10)
               : parseFloat(metricValue),
           timeUnixNano: timeUnixNano,
-          // Add the start time!
           startTimeUnixNano: startTimeUnixNano,
           attributes: [],
         },
@@ -374,7 +369,8 @@ function createMetric(
   });
 
   if (metricType === "sum") {
-    metric.sum.aggregationTemporality = "AGGREGATION_TEMPORALITY_DELTA";
+    // Reverted to CUMULATIVE so Grafana accepts it!
+    metric.sum.aggregationTemporality = "AGGREGATION_TEMPORALITY_CUMULATIVE";
     metric.sum.isMonotonic = true;
   }
 
