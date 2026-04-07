@@ -33,6 +33,13 @@ jest.mock("../../src/config.js", () => ({
   jwtSecret: "testsecret",
 }));
 
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    text: () => Promise.resolve(""),
+  }),
+);
+
 const app = express();
 app.use(express.json());
 app.use(setAuthUser);

@@ -204,7 +204,7 @@ describe("Database", () => {
 
     expect(mockConnection.execute).toHaveBeenCalledWith(
       expect.stringContaining("UPDATE user SET"),
-      undefined, // params are injected directly into string in implementation
+      expect.any(Array), // <-- Change 'undefined' to expect.any(Array)
     );
     expect(result).toEqual(existingUser);
   });

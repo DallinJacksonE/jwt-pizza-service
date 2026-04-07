@@ -17,35 +17,19 @@ cleanup() {
 trap cleanup SIGINT
 
 # Wrap curl command to return HTTP response codes
-execute_curl() { # Added debugging to execute_curl
-  local output
-  local http_code
-  # Capture both stdout and stderr from curl
-  output=$(curl -s -o /dev/null -w "%{http_code}" "$@" 2>&1)
-  http_code=$(echo "$output" | tail -n 1) # Extract the last line, which should be the http_code
-  echo "DEBUG: execute_curl raw output: '$output', Extracted HTTP Code: '$http_code'" >&2 # Log to stderr
-  echo "$http_code" # Return only the extracted HTTP code
+execute_curl() {
+  curl -s -o /dev/null -w "%{http_code}" "$@"
 }
 
 # Function to login and get a token
 login() {
-  local email=$1
-  local password=$2
-  local response
-  local http_code
-
-  # Perform the curl request and capture both response body and HTTP status code
-  response=$(curl -s -w "%{http_code}" -X PUT "$host/api/auth" -d "{\"email\":\"$email\", \"password\":\"$password\"}" -H 'Content-Type: application/json')
-  http_code="${response: -3}" # Extract the last 3 characters as HTTP code
-  response_body="${response:0:${#response}-3}" # Remove the HTTP code from the response body
-
-  echo "DEBUG: Login for '$email'. HTTP Code: $http_code. Body: $response_body"
-
-  if [ "$http_code" -eq 200 ] && [[ "$response_body" == *"token"* ]]; then
-    echo "$response_body" | grep -o '"token":"[^"]*"' | cut -d'"' -f4
-  else
-    echo "" # Return empty string on failure
+  response=$(curl -s -X PUT "$host/api/auth" -d "{\"email\":\"$1\", \"password\":\"$2\"}" -H 'Content-Type: application/json')
+  # Check if curl failed or returned an error message instead of JSON
+  if ! [[ "$response" == *"token"* ]]; then
+    echo ""
+    return
   fi
+  echo "$response" | grep -o '"token":"[^"]*"' | cut -d'"' -f4
 }
 
 # Simulate a user requesting the menu every 3 seconds
@@ -58,9 +42,8 @@ pid1=$!
 
 # Simulate a user with an invalid email and password every 25 seconds
 while true; do
-  response=$(curl -s -w " | HTTP_CODE: %{http_code}" -X PUT "$host/api/auth" -d '{"email":"unknown@jwt.com", "password":"bad"}' -H 'Content-Type: application/json')
-  echo "Logging in with invalid credentials..."
-  echo "DEBUG: Invalid login response body and code: $response"
+  result=$(execute_curl -X PUT "$host/api/auth" -d '{"email":"unknown@jwt.com", "password":"bad"}' -H 'Content-Type: application/json')
+  echo "Logging in with invalid credentials..." $result
   sleep 25
 done &
 pid2=$!
@@ -68,7 +51,7 @@ pid2=$!
 # Simulate a franchisee logging in every two minutes
 while true; do
   token=$(login "f@jwt.com" "franchisee")
-  echo "Login franchisee..." $( [ -n "$token" ] && echo "true" || echo "false" )
+  echo "Login franchisee..." $( [ -z "$token" ] && echo "false" || echo "true" )
   sleep 110
   result=$(execute_curl -X DELETE "$host/api/auth" -H "Authorization: Bearer $token")
   echo "Logging out franchisee..." $result
@@ -79,7 +62,12 @@ pid3=$!
 # Simulate a diner ordering a pizza every 50 seconds
 while true; do
   token=$(login "d@jwt.com" "diner")
-  echo "Login diner..." $( [ -n "$token" ] && echo "true" || echo "false" )
+if [ -z "$token" ]; then
+  echo "Login failed, skipping order..."
+  sleep 10
+  continue
+fi
+  echo "Login diner..." $( [ -z "$token" ] && echo "false" || echo "true" )
   result=$(execute_curl -X POST "$host/api/order" -H 'Content-Type: application/json' -d '{"franchiseId": 1, "storeId":1, "items":[{ "menuId": 1, "description": "Veggie", "price": 0.05 }]}' -H "Authorization: Bearer $token")
   echo "Bought a pizza..." $result
   sleep 20
@@ -92,7 +80,7 @@ pid4=$!
 # Simulate a failed pizza order every 5 minutes
 while true; do
   token=$(login "d@jwt.com" "diner")
-  echo "Login hungry diner..." $( [ -n "$token" ] && echo "true" || echo "false" )
+  echo "Login hungry diner..." $( [ -z "$token" ] && echo "false" || echo "true" )
 
   items='{ "menuId": 1, "description": "Veggie", "price": 0.05 }'
   for (( i=0; i < 21; i++ ))

@@ -29,6 +29,13 @@ jest.mock("../../src/routes/authRouter.js", () => ({
   },
 }));
 
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    text: () => Promise.resolve(""),
+  }),
+);
+
 const app = express();
 app.use(express.json());
 
@@ -104,7 +111,9 @@ describe("franchiseRouter", () => {
   test("DELETE /api/franchise/:franchiseId deletes franchise", async () => {
     DB.deleteFranchise.mockResolvedValue();
 
-    const res = await request(app).delete("/api/franchise/1"); // Note: The route doesn't explicitly require auth in code provided, but likely should. Following code strictly.
+    const res = await request(app)
+      .delete("/api/franchise/1")
+      .set("x-user", adminUser);
 
     expect(res.status).toBe(200);
     expect(res.body.message).toBe("franchise deleted");
