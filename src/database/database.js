@@ -124,7 +124,7 @@ class DB {
         !user ||
         (password && !(await bcrypt.compare(password, user.password)))
       ) {
-        throw new StatusCodeError("unknown user", 404);
+        return null;
       }
 
       const roleResult = await this.query(

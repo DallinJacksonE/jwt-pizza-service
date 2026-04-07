@@ -102,6 +102,10 @@ authRouter.put(
     const { email, password } = req.body;
     try {
       const user = await DB.getUser(email, password);
+      if (!user) {
+        metrics.userLoggedIn(false);
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
       const auth = await setAuth(user);
       metrics.userLoggedIn(true);
       res.json({ user: user, token: auth });

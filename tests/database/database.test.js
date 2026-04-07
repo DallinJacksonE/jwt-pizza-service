@@ -180,12 +180,10 @@ describe("Database", () => {
     expect(result.password).toBeUndefined();
   });
 
-  test("getUser should throw 404 if user not found", async () => {
+  test("getUser should return null user not found", async () => {
     mockConnection.execute.mockResolvedValueOnce([[]]); // No user found
 
-    await expect(DB.getUser("bad@email.com", "pass")).rejects.toThrow(
-      StatusCodeError,
-    );
+    await expect(DB.getUser("bad@email.com", "pass")).resolves.toBeNull();
   });
 
   test("updateUser should update fields and return updated user", async () => {
