@@ -342,6 +342,11 @@ function createMetric(
 ) {
   attributes = { ...attributes, source: config.metrics.source };
 
+  // Calculate timestamps once for consistency
+  const nowMs = Date.now();
+  const timeUnixNano = nowMs * 1000000;
+  const startTimeUnixNano = (nowMs - 5000) * 1000000; // 5 seconds ago
+
   const metric = {
     name: metricName,
     unit: metricUnit,
@@ -352,7 +357,9 @@ function createMetric(
             valueType === "asInt"
               ? parseInt(metricValue, 10)
               : parseFloat(metricValue),
-          timeUnixNano: Date.now() * 1000000,
+          timeUnixNano: timeUnixNano,
+          // Add the start time!
+          startTimeUnixNano: startTimeUnixNano,
           attributes: [],
         },
       ],
