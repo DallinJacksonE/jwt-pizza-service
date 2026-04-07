@@ -12,6 +12,7 @@ const app = express();
 app.use(express.json());
 app.use(setAuthUser);
 app.use((req, res, next) => {
+  console.log(req.user);
   if (req.user) {
     metrics.trackUserActivity(req.user.id);
   }

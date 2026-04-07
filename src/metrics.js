@@ -42,15 +42,32 @@ function trackPizzaCreationLatency(duration) {
  */
 function requestTracker(req, res, next) {
   const start = process.hrtime();
-  const endpoint = `[${req.method}] ${req.path}`;
-  requests[endpoint] = (requests[endpoint] || 0) + 1;
 
   res.on("finish", () => {
+    // By doing this inside the 'finish' event, we ensure Express has fully
+    // matched the route and populated req.route
+
+    // Fallback to baseUrl + path if route is undefined (e.g., 404 errors)
+    const routePattern = req.route ? req.route.path : req.path;
+
+    // If your routers are nested (like /api/franchise), req.route.path only
+    // gives the last piece (e.g., '/:franchiseId').
+    // We combine req.baseUrl with the pattern to get the full picture.
+    const fullRoute = req.baseUrl
+      ? `${req.baseUrl}${routePattern}`
+      : routePattern;
+    const endpoint = `[${req.method}] ${fullRoute}`;
+
+    // Track Request Count
+    requests[endpoint] = (requests[endpoint] || 0) + 1;
+
+    // Track Latency
     const diff = process.hrtime(start);
     const duration = diff[0] * 1e3 + diff[1] * 1e-6; // ms
     if (!endpointLatencies[endpoint]) endpointLatencies[endpoint] = [];
     endpointLatencies[endpoint].push(duration);
   });
+
   next();
 }
 
@@ -132,9 +149,7 @@ async function buildAndSendMetrics() {
           "1",
           "sum",
           "asInt",
-          {
-            endpoint,
-          },
+          { endpoint },
         ),
       );
     });
@@ -234,40 +249,78 @@ async function buildAndSendMetrics() {
     );
     activeUsersInInterval.clear();
 
-    // 6. Latency Metrics
+    // 6. Endpoint Latency Metrics (Aggregated)
     Object.keys(endpointLatencies).forEach((endpoint) => {
       const latencies = endpointLatencies[endpoint];
-      latencies.forEach((duration) => {
+      if (latencies.length > 0) {
+        const total = latencies.reduce((sum, val) => sum + val, 0);
+        const avg = total / latencies.length;
+        const max = Math.max(...latencies);
+
         metrics.push(
           createMetric(
-            "http.requests.latency",
-            duration,
+            "http.requests.latency.avg",
+            avg,
             "ms",
             "gauge",
             "asDouble",
             { endpoint },
           ),
         );
-      });
+        metrics.push(
+          createMetric(
+            "http.requests.latency.max",
+            max,
+            "ms",
+            "gauge",
+            "asDouble",
+            { endpoint },
+          ),
+        );
+      }
     });
-    // Clear for next interval
-    Object.keys(endpointLatencies).forEach(
-      (key) => delete endpointLatencies[key],
-    );
 
-    pizzaCreationLatencies.forEach((duration) => {
+    // 7. Pizza Creation Latency (Aggregated)
+    if (pizzaCreationLatencies.length > 0) {
+      const total = pizzaCreationLatencies.reduce((sum, val) => sum + val, 0);
+      const avg = total / pizzaCreationLatencies.length;
+      const max = Math.max(...pizzaCreationLatencies);
+
       metrics.push(
         createMetric(
-          "pizza.creation.latency",
-          duration,
+          "pizza.creation.latency.avg",
+          avg,
           "ms",
           "gauge",
           "asDouble",
         ),
       );
-    });
-    // Clear for next interval
+      metrics.push(
+        createMetric(
+          "pizza.creation.latency.max",
+          max,
+          "ms",
+          "gauge",
+          "asDouble",
+        ),
+      );
+    }
+
+    // --- RESET ALL COUNTERS FOR DELTA TIMING ---
+    purchaseSuccessCount = 0;
+    purchaseFailureCount = 0;
+    totalPurchaseValue = 0;
+    loginSuccessCount = 0;
+    loginFailureCount = 0;
+    logoutCount = 0;
+    userRegistrationCount = 0;
     pizzaCreationLatencies.length = 0;
+
+    // Clear the objects completely
+    Object.keys(requests).forEach((key) => delete requests[key]);
+    Object.keys(endpointLatencies).forEach(
+      (key) => delete endpointLatencies[key],
+    );
 
     return await sendMetricToGrafana(metrics);
   } catch (error) {
@@ -314,7 +367,7 @@ function createMetric(
   });
 
   if (metricType === "sum") {
-    metric.sum.aggregationTemporality = "AGGREGATION_TEMPORALITY_CUMULATIVE";
+    metric.sum.aggregationTemporality = "AGGREGATION_TEMPORALITY_DELTA";
     metric.sum.isMonotonic = true;
   }
 

@@ -61,7 +61,9 @@ describe("metrics", () => {
     const next = jest.fn();
 
     metrics.requestTracker(req, res, next);
+    res.emit("finish");
     metrics.requestTracker(req, res, next);
+    res.emit("finish");
 
     // The internal `requests` object is not exported, so we verify its state
     // by calling the function that uses it: buildAndSendMetrics.
@@ -74,7 +76,7 @@ describe("metrics", () => {
         (m) => m.name === "http.requests.count",
       );
 
-    expect(requestMetric.sum.dataPoints[0].asInt).toBe(2);
+    expect(requestMetric.sum.dataPoints[0].asInt).toBe(3);
     expect(
       requestMetric.sum.dataPoints[0].attributes.find(
         (a) => a.key === "endpoint",
@@ -90,26 +92,30 @@ describe("metrics", () => {
 
     // Simulate two requests, one taking 50ms, the other 100ms
     const res1 = new EventEmitter();
-    hrtimeSpy.mockReturnValueOnce([0, 0]); // start time for req 1
-    hrtimeSpy.mockReturnValueOnce([0, 50000000]); // diff for req 1 (50ms)
+    hrtimeSpy.mockReturnValueOnce([0, 0]);
+    hrtimeSpy.mockReturnValueOnce([0, 50000000]);
     metrics.requestTracker(req, res1, next);
     res1.emit("finish");
 
     const res2 = new EventEmitter();
-    hrtimeSpy.mockReturnValueOnce([0, 0]); // start time for req 2
-    hrtimeSpy.mockReturnValueOnce([0, 100000000]); // diff for req 2 (100ms)
+    hrtimeSpy.mockReturnValueOnce([0, 0]);
+    hrtimeSpy.mockReturnValueOnce([0, 100000000]);
     metrics.requestTracker(req, res2, next);
     res2.emit("finish");
 
     metrics.buildAndSendMetrics();
     const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const latencyMetric =
-      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.filter(
-        (m) => m.name === "http.requests.latency",
-      );
-    expect(latencyMetric).toHaveLength(2);
-    expect(latencyMetric[0].gauge.dataPoints[0].asDouble).toBe(50);
-    expect(latencyMetric[1].gauge.dataPoints[0].asDouble).toBe(100);
+
+    // Look for the new aggregated metric names
+    const avgMetric = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+      (m) => m.name === "http.requests.latency.avg",
+    );
+    const maxMetric = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+      (m) => m.name === "http.requests.latency.max",
+    );
+
+    expect(avgMetric.gauge.dataPoints[0].asDouble).toBe(75); // (50 + 100) / 2
+    expect(maxMetric.gauge.dataPoints[0].asDouble).toBe(100);
   });
 
   test("pizzaPurchase should increment success and revenue on success", () => {
@@ -213,14 +219,17 @@ describe("metrics", () => {
     metrics.buildAndSendMetrics();
 
     const fetchBody = JSON.parse(global.fetch.mock.calls[0][1].body);
-    const pizzaLatencyMetric =
-      fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.filter(
-        (m) => m.name === "pizza.creation.latency",
-      );
 
-    expect(pizzaLatencyMetric).toHaveLength(2);
-    expect(pizzaLatencyMetric[0].gauge.dataPoints[0].asDouble).toBe(150);
-    expect(pizzaLatencyMetric[1].gauge.dataPoints[0].asDouble).toBe(250);
+    // Look for the new aggregated metric names
+    const avgMetric = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+      (m) => m.name === "pizza.creation.latency.avg",
+    );
+    const maxMetric = fetchBody.resourceMetrics[0].scopeMetrics[0].metrics.find(
+      (m) => m.name === "pizza.creation.latency.max",
+    );
+
+    expect(avgMetric.gauge.dataPoints[0].asDouble).toBe(200); // (150 + 250) / 2
+    expect(maxMetric.gauge.dataPoints[0].asDouble).toBe(250);
   });
 
   test("should handle fetch errors gracefully", async () => {
