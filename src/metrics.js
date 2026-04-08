@@ -48,10 +48,9 @@ function requestTracker(req, res, next) {
   const start = process.hrtime();
 
   res.on("finish", () => {
-    // By doing this inside the 'finish' event, we ensure Express has fully
-    // matched the route and populated req.route
-
-    // Fallback to baseUrl + path if route is undefined (e.g., 404 errors)
+    if (!req.route) {
+      return;
+    }
     const routePattern = req.route ? req.route.path : req.path;
 
     // If your routers are nested (like /api/franchise), req.route.path only

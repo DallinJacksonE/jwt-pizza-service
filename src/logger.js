@@ -4,6 +4,10 @@ class Logger {
   httpLogger = (req, res, next) => {
     let send = res.send;
     res.send = (resBody) => {
+      if (!req.route) {
+        res.send = send;
+        return res.send(resBody);
+      }
       const logData = {
         authorized: !!req.headers.authorization,
         path: req.path,
