@@ -123,7 +123,7 @@ orderRouter.post(
 
       if (orderReq.items && orderReq.items.length > 21) {
         return res.status(500).send({
-          message: "Failed to fulfill order at factory",
+          message: "Order too large to fulfill",
           followLinkToEndChaos: j.reportUrl,
         });
       }
