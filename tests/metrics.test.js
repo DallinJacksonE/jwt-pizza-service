@@ -56,7 +56,11 @@ describe("metrics", () => {
   });
 
   test("requestTracker should increment endpoint count and call next", () => {
-    const req = { method: "GET", path: "/api/test" };
+    const req = {
+      method: "GET",
+      path: "/api/test",
+      route: { path: "/api/test" },
+    };
     const res = new EventEmitter();
     const next = jest.fn();
 
@@ -86,7 +90,11 @@ describe("metrics", () => {
   });
 
   test("requestTracker should record endpoint latency", () => {
-    const req = { method: "GET", path: "/api/latency-test" };
+    const req = {
+      method: "GET",
+      path: "/api/latency-test",
+      route: { path: "/api/latency-test" },
+    };
     const next = jest.fn();
     const hrtimeSpy = jest.spyOn(process, "hrtime");
 

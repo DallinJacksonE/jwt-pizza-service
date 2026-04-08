@@ -418,6 +418,7 @@ if (process.env.NODE_ENV !== "test") {
   setInterval(async () => {
     await buildAndSendMetrics();
   }, 5000);
+  timer.unref();
 }
 
 module.exports = {
