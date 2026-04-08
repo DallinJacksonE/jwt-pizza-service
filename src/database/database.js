@@ -37,6 +37,17 @@ class DB {
   async addUser(user) {
     const connection = await this.getConnection();
     try {
+      // --- SERVICE LEVEL DUPLICATE CHECK ---
+      const existingUsers = await this.query(
+        connection,
+        `SELECT id FROM user WHERE email=?`,
+        [user.email],
+      );
+      if (existingUsers.length > 0) {
+        throw new StatusCodeError("already exists", 409);
+      }
+      // -------------------------------------
+
       const hashedPassword = await bcrypt.hash(user.password, 10);
 
       const userResult = await this.query(
@@ -145,6 +156,20 @@ class DB {
   async updateUser(userId, name, email, password) {
     const connection = await this.getConnection();
     try {
+      // --- SERVICE LEVEL DUPLICATE CHECK ---
+      if (email) {
+        const existingUsers = await this.query(
+          connection,
+          `SELECT id FROM user WHERE email=?`,
+          [email],
+        );
+        // If the email exists, and the ID doesn't match the current user making the request
+        if (existingUsers.length > 0 && existingUsers[0].id !== userId) {
+          throw new StatusCodeError("already exists", 409);
+        }
+      }
+      // -------------------------------------
+
       const updates = [];
       const values = [];
 
@@ -526,13 +551,20 @@ class DB {
         }
 
         if (!dbExists) {
-          const defaultAdmin = {
-            name: "常用名字",
-            email: "a@jwt.com",
-            password: "admin",
-            roles: [{ role: Role.Admin }],
-          };
-          await this.addUser(defaultAdmin);
+          // --- FIX: Insert directly to avoid getConnection() deadlock ---
+          const hashedPassword = await bcrypt.hash("toomanysecerets", 10);
+
+          const userResult = await this.query(
+            connection,
+            `INSERT INTO user (name, email, password) VALUES (?, ?, ?)`,
+            ["dj", "dj@jwt.com", hashedPassword],
+          );
+
+          await this.query(
+            connection,
+            `INSERT INTO userRole (userId, role, objectId) VALUES (?, ?, ?)`,
+            [userResult.insertId, Role.Admin, 0],
+          );
         }
       } finally {
         if (connection) {

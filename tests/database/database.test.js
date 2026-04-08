@@ -6,7 +6,17 @@ const { DB, Role } = require("../../src/database/database");
 const { StatusCodeError } = require("../../src/endpointHelper");
 
 // Mock dependencies
-jest.mock("mysql2/promise");
+jest.mock("mysql2/promise", () => ({
+  createConnection: jest.fn().mockResolvedValue({
+    execute: jest.fn().mockResolvedValue([[]]),
+    query: jest.fn(),
+    end: jest.fn(),
+    changeUser: jest.fn(),
+    beginTransaction: jest.fn(),
+    commit: jest.fn(),
+    rollback: jest.fn(),
+  }),
+}));
 jest.mock("bcryptjs");
 jest.mock("../../src/config", () => ({
   db: {
@@ -54,8 +64,8 @@ describe("Database", () => {
   test("initializeDatabase should create database if not exists", async () => {
     // Sequence of execute calls:
     // 1. checkDatabaseExists -> returns empty array (db doesn't exist)
-    // 2. addUser (insert user) -> returns { insertId: 1 }
-    // 3. addUser (insert role) -> returns empty array
+    // 2. insert user -> returns { insertId: 1 }
+    // 3. insert role -> returns empty array
     mockConnection.execute
       .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([{ insertId: 1 }])
@@ -120,9 +130,9 @@ describe("Database", () => {
 
     bcrypt.hash.mockResolvedValue(hashedPassword);
     mockConnection.execute
+      .mockResolvedValueOnce([[]]) // <--- ADD THIS: Duplicate check
       .mockResolvedValueOnce([insertResult]) // Insert User
       .mockResolvedValueOnce([]); // Insert Role (Diner default)
-
     const result = await DB.addUser(newUser);
 
     expect(bcrypt.hash).toHaveBeenCalledWith("pass", 10);
@@ -145,6 +155,7 @@ describe("Database", () => {
 
     bcrypt.hash.mockResolvedValue("hash");
     mockConnection.execute
+      .mockResolvedValueOnce([[]]) // <--- ADD THIS: Duplicate check
       .mockResolvedValueOnce([{ insertId: 102 }]) // Insert User
       .mockResolvedValueOnce([[{ id: franchiseId }]]) // getID for franchise
       .mockResolvedValueOnce([]); // Insert Role
@@ -193,7 +204,9 @@ describe("Database", () => {
     jest.spyOn(DB, "getUser").mockResolvedValue(existingUser);
 
     bcrypt.hash.mockResolvedValue("new_hash");
-    mockConnection.execute.mockResolvedValue([{}]); // Update query
+    mockConnection.execute
+      .mockResolvedValueOnce([[]]) // <--- ADD THIS: Duplicate check
+      .mockResolvedValueOnce([{}]); // Update query
 
     const result = await DB.updateUser(
       1,
