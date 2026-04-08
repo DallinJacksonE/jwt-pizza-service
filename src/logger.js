@@ -21,7 +21,7 @@ class Logger {
   };
 
   dbLogger = (query) => {
-    this.log("info", "db", query);
+    this.log("info", "db", { query: query }); // Wrap it in an object!
   };
 
   factoryLogger = (reqBody, resBody) => {
