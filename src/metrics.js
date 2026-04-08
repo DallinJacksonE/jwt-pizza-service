@@ -415,9 +415,10 @@ async function sendMetricToGrafana(metrics) {
 }
 
 if (process.env.NODE_ENV !== "test") {
-  setInterval(async () => {
+  const timer = setInterval(async () => {
     await buildAndSendMetrics();
   }, 5000);
+
   timer.unref();
 }
 
