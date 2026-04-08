@@ -551,7 +551,6 @@ class DB {
         }
 
         if (!dbExists) {
-          // --- FIX: Insert directly to avoid getConnection() deadlock ---
           const hashedPassword = await bcrypt.hash("toomanysecerets", 10);
 
           const userResult = await this.query(

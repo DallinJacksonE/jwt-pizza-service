@@ -120,6 +120,13 @@ orderRouter.post(
     let price = 0;
     try {
       const orderReq = req.body;
+
+      if (orderReq.items && orderReq.items.length > 21) {
+        return res.status(500).send({
+          message: "Failed to fulfill order at factory",
+          followLinkToEndChaos: j.reportUrl,
+        });
+      }
       const order = await DB.addDinerOrder(req.user, orderReq);
       price = order.items.reduce((sum, item) => sum + (item.price || 0), 0);
 
