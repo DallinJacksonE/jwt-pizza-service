@@ -36,59 +36,60 @@ login() {
 while true; do
   result=$(execute_curl "$host/api/order/menu")
   echo "Requesting menu..." $result
-  sleep 3
+  sleep 30
 done &
 pid1=$!
 
-# Simulate a user with an invalid email and password every 25 seconds
+# Simulate a user with an invalid email and password every 120 seconds
 while true; do
   result=$(execute_curl -X PUT "$host/api/auth" -d '{"email":"unknown@jwt.com", "password":"bad"}' -H 'Content-Type: application/json')
   echo "Logging in with invalid credentials..." $result
-  sleep 25
+  sleep 120
 done &
 pid2=$!
 
-# Simulate a franchisee logging in every two minutes
+# Simulate a franchisee logging in every four minutes
 while true; do
   token=$(login "f@jwt.com" "franchisee")
-  echo "Login franchisee..." $( [ -z "$token" ] && echo "false" || echo "true" )
-  sleep 110
+  echo "Login franchisee..." $([ -z "$token" ] && echo "false" || echo "true")
+  sleep 230
   result=$(execute_curl -X DELETE "$host/api/auth" -H "Authorization: Bearer $token")
   echo "Logging out franchisee..." $result
   sleep 10
 done &
 pid3=$!
 
-# Simulate a diner ordering a pizza every 50 seconds
+# Simulate a diner ordering a pizza every 350 seconds
 while true; do
   token=$(login "d@jwt.com" "diner")
-if [ -z "$token" ]; then
-  echo "Login failed, skipping order..."
-  sleep 10
-  continue
-fi
-  echo "Login diner..." $( [ -z "$token" ] && echo "false" || echo "true" )
+  if [ -z "$token" ]; then
+    echo "Login failed, skipping order..."
+    sleep 10
+    continue
+  fi
+  echo "Login diner..." $([ -z "$token" ] && echo "false" || echo "true")
   result=$(execute_curl -X POST "$host/api/order" -H 'Content-Type: application/json' -d '{"franchiseId": 1, "storeId":1, "items":[{ "menuId": 1, "description": "Veggie", "price": 0.05 }]}' -H "Authorization: Bearer $token")
   echo "Bought a pizza..." $result
   sleep 20
   result=$(execute_curl -X DELETE "$host/api/auth" -H "Authorization: Bearer $token")
   echo "Logging out diner..." $result
   sleep 30
+  sleep 300
 done &
 pid4=$!
 
-# Simulate a failed pizza order every 5 minutes
+# Simulate a failed pizza order every 20 mintus
 while true; do
   token=$(login "d@jwt.com" "diner")
-  echo "Login hungry diner..." $( [ -z "$token" ] && echo "false" || echo "true" )
+  echo "Login hungry diner..." $([ -z "$token" ] && echo "false" || echo "true")
 
   items='{ "menuId": 1, "description": "Veggie", "price": 0.05 }'
-  for (( i=0; i < 21; i++ ))
-  do items+=', { "menuId": 1, "description": "Veggie", "price": 0.05 }'
+  for ((i = 0; i < 21; i++)); do
+    items+=', { "menuId": 1, "description": "Veggie", "price": 0.05 }'
   done
-  
+
   result=$(execute_curl -X POST "$host/api/order" -H 'Content-Type: application/json' -d "{\"franchiseId\": 1, \"storeId\":1, \"items\":[$items]}" -H "Authorization: Bearer $token")
-  echo "Bought too many pizzas..." $result  
+  echo "Bought too many pizzas..." $result
   sleep 5
   result=$(execute_curl -X DELETE "$host/api/auth" -H "Authorization: Bearer $token")
   echo "Logging out hungry diner..." $result
@@ -99,13 +100,13 @@ pid5=$!
 while true; do
   # Generate a random 8-character string for a unique email
   random_string=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)
-  
+
   result=$(execute_curl -X POST "$host/api/auth" -H 'Content-Type: application/json' -d "{\"name\":\"test_$random_string\", \"email\":\"test_$random_string@jwt.com\", \"password\":\"diner\"}")
   echo "Registered new user test_$random_string..." $result
-  sleep 60
+  sleep 600
 done &
 pid6=$!
 
-
 # Wait for the background processes to complete
 wait $pid1 $pid2 $pid3 $pid4 $pid5 $pid6
+
